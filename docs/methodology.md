@@ -35,16 +35,16 @@ SUPPORT EARLY ACTION
 
 ## 4. Warning Principle
 
-The system should communicate risk indicators and unusual patterns.
+The system communicates risk indicators and unusual patterns.
 
-It should not claim that a disaster will definitely happen.
+It must not claim that a disaster will definitely happen.
 
-For example:
+Good example:
 
-Good:
 "Elevated flood-related signal detected."
 
 Avoid:
+
 "A flood will happen tomorrow."
 
 ## 5. Initial Warning Levels
@@ -55,9 +55,10 @@ WATCH: 40–69
 
 HIGH CONCERN: 70–100
 
-These thresholds are provisional and must later be tested using historical
-data, model evaluation, backtesting, false-positive analysis, and
-false-negative analysis.
+These thresholds are provisional.
+
+They must later be tested using historical data, model evaluation,
+backtesting, false-positive analysis, and false-negative analysis.
 
 ## 6. Explainability
 
@@ -85,3 +86,11 @@ The platform should disclose:
 
 AI-generated explanations must be based on verified analytical results
 and must not invent evidence.
+
+## 8. Data Integrity
+
+MENYA NEZA AI must not present synthetic, fabricated, or unverified
+information as actual Rwanda observations.
+
+Every dataset used for analysis must have documented source information,
+geographic coverage, time period, variables, and known limitations.
