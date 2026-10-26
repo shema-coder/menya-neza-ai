@@ -1,0 +1,49 @@
+MENYA NEZA AI — SESSION CHECKPOINT
+Sun Oct 25 21:23:25 SAST 2026
+
+Git status:
+ M .gitignore
+ M README.md
+ M backend/app/main.py
+ M data/metadata/dataset_registry.csv
+ M docs/data-sources.md
+?? backend/app/services/agriculture.py
+?? backend/app/services/ask.py
+?? backend/app/services/intelligence.py
+?? backend/app/services/question_bank.py
+?? backend/app/services/tangabid.py
+?? backend/app/services/wfp_prices.py
+?? backend/tests/
+?? backups/
+?? data/knowledge/
+?? data/metadata/dataset_registry.csv.bak
+?? data/metadata/market_price_source_registry.csv
+?? data/metadata/market_price_source_registry.csv.bak
+?? data/metadata/tangabid_price_trends_quality.json
+?? data/metadata/wfp_rwanda_food_prices_quality.json
+?? docs/data-quality-report.md
+?? docs/market-price-data-plan.md
+?? docs/session-checkpoint-2026-10-25.txt
+?? frontend/
+?? requirements-dev.txt
+?? scripts/
+
+Question-bank status:
+{
+  "status": "ready",
+  "source": "NISR Seasonal Agricultural Survey 2025",
+  "total_questions": 13200,
+  "source_records": 1650,
+  "by_language": {
+    "en": 6600,
+    "rw": 6600
+  },
+  "storage_format": "JSONL",
+  "last_generated": "2026-10-25T21:16:26+02:00",
+  "limitation": "These are historical survey records, not live market prices, current production estimates, weather forecasts, or official disaster warnings."
+}
+
+Backend tests: last observed result was 76 passed, 1 failed.
+Outstanding: natural Kinyarwanda parsing; one regression test remains failing.
+Next: verify frontend bank suggestions, fix free-form Kinyarwanda parsing,
+then improve comparison, rankings, and data-quality answers.

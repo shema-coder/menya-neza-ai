@@ -1,0 +1,119 @@
+{
+  "source_id": "WFP_HDX_RWA_FOOD_PRICES",
+  "source": "Electric Sheep Africa; upstream WFP via HDX",
+  "status": "RESEARCH_ONLY_NOT_INTEGRATED",
+  "publication_ready": false,
+  "file_names": [
+    "train.parquet",
+    "test.parquet"
+  ],
+  "record_count": 103933,
+  "columns": [
+    "date",
+    "admin1",
+    "admin2",
+    "market",
+    "market_id",
+    "latitude",
+    "longitude",
+    "category",
+    "commodity",
+    "commodity_id",
+    "unit",
+    "priceflag",
+    "pricetype",
+    "currency",
+    "price",
+    "usdprice",
+    "esa_source",
+    "esa_processed"
+  ],
+  "date_range": {
+    "first": "2000-01-15",
+    "last": "2026-03-15"
+  },
+  "quality_checks": {
+    "missing_required_values": {
+      "admin1": 0,
+      "admin2": 0,
+      "category": 0,
+      "commodity": 0,
+      "commodity_id": 0,
+      "currency": 0,
+      "date": 0,
+      "esa_processed": 0,
+      "esa_source": 0,
+      "latitude": 0,
+      "longitude": 0,
+      "market": 0,
+      "market_id": 0,
+      "price": 0,
+      "priceflag": 0,
+      "pricetype": 0,
+      "unit": 0,
+      "usdprice": 0
+    },
+    "invalid_dates": 0,
+    "blank_required_values": {
+      "admin1": 0,
+      "admin2": 0,
+      "market": 0,
+      "category": 0,
+      "commodity": 0,
+      "unit": 0,
+      "priceflag": 0,
+      "pricetype": 0,
+      "currency": 0,
+      "esa_source": 0
+    },
+    "invalid_prices": 0,
+    "nonpositive_prices": 0,
+    "invalid_latitudes": 0,
+    "invalid_longitudes": 0,
+    "unknown_price_types": {},
+    "unknown_price_flags": {},
+    "unknown_currencies": {},
+    "unknown_units": {},
+    "duplicate_candidate_key_rows": 0,
+    "missing_or_unavailable_district_rows": 1507,
+    "records_in_markets_flagged_for_geography_review": 4455,
+    "geography_review_rows_by_market_name": {
+      "Kimironko": 1536,
+      "Gisenyi": 1507,
+      "Muhanga": 1412
+    },
+    "market_ids_with_multiple_market_admin_combinations": 0
+  },
+  "price_types": {
+    "Retail": 103433,
+    "Wholesale": 500
+  },
+  "price_flags": {
+    "actual": 97712,
+    "actual,aggregate": 4289,
+    "aggregate": 1932
+  },
+  "units": {
+    "KG": 91025,
+    "Unit": 6678,
+    "L": 4064,
+    "Sack": 2166
+  },
+  "currencies": {
+    "RWF": 103933
+  },
+  "forecast_produced": false,
+  "limitations": [
+    "Historical observations only; this is not a live price feed.",
+    "The latest observed date in the inspected extract is 2026-03-15.",
+    "Market collection methodology and upstream licensing require verification.",
+    "Retail and wholesale observations are distinct and must not be combined.",
+    "Source price flags are preserved; aggregate observations are not treated as individual actual observations.",
+    "Units must remain distinct; prices per KG, L, Unit, and Sack are not directly comparable.",
+    "Some district labels are unavailable, and some market-geography combinations require investigation.",
+    "No forecasts or corrected geographic labels are produced."
+  ],
+  "note": "This report describes the inspected historical extract. Quality flags identify records for review; they do not establish that a source record is false or authorize a geographic correction.",
+  "report_generated_at_utc": "2026-10-24T16:41:42.284992+00:00",
+  "report_version": 2
+}

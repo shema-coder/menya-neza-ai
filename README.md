@@ -48,6 +48,19 @@ or professional decision-making.
 
 ## Project Status
 
-Version 0.1.0
+Version 0.2.0 — working prototype.
 
-Initial backend foundation established with FastAPI.
+The project includes a FastAPI backend, a React/Vite frontend,
+historical NISR SAS 2025 crop-production data, source traceability,
+data-quality diagnostics, and automated backend/API tests.
+
+The current prototype does not provide validated disaster-risk
+predictions, live weather, or official warnings.
+
+Run backend tests from the repository root with:
+
+`.venv/bin/python -m pytest backend/tests/ -v`
+
+Build the frontend from the `frontend` directory with:
+
+`npm run build`

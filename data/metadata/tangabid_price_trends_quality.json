@@ -1,0 +1,49 @@
+{
+  "source": "TangaBid-provided monthly price-trend dataset",
+  "file": "data/raw/tangabid/tangabid_six_month_price_trends.csv",
+  "sha256": "422ad373df334960d98422be39e7f0cc6748aa72bce20f2c9529f2eece486285",
+  "record_count": 6765,
+  "month_counts": {
+    "2026-04-01": 405,
+    "2026-05-01": 1264,
+    "2026-06-01": 987,
+    "2026-07-01": 1211,
+    "2026-08-01": 955,
+    "2026-09-01": 1108,
+    "2026-10-01": 835
+  },
+  "unique_products": 122,
+  "unique_locations": 47,
+  "unique_regions": 26,
+  "exact_region_label_count": 27,
+  "region_label_variants": {
+    "kicukiro": [
+      "KICUKIRO",
+      "Kicukiro"
+    ]
+  },
+  "units": {
+    "Bottle": 100,
+    "Kg": 6141,
+    "Litre": 157,
+    "Piece": 318,
+    "Sack": 49
+  },
+  "unique_units": 5,
+  "duplicate_keys": 0,
+  "invalid_dates": 0,
+  "invalid_prices": 0,
+  "nonpositive_prices": 0,
+  "invalid_price_ranges": 0,
+  "invalid_sample_counts": 0,
+  "empty_required_fields": 0,
+  "duplicate_export": {
+    "exists": true,
+    "sha256": "422ad373df334960d98422be39e7f0cc6748aa72bce20f2c9529f2eece486285",
+    "byte_identical_to_canonical": true
+  },
+  "coverage_start_month": "2026-04",
+  "coverage_end_month": "2026-10",
+  "calendar_month_count": 7,
+  "coverage_note": "October 2026 may be incomplete. Currency, collection methodology, exact price type, sample-count meaning, and consistency of markets, sellers, and sampling across months remain unverified."
+}
