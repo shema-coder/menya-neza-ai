@@ -12117,3 +12117,52 @@ section.commitment a {
     transition: none;
   }
 }
+
+/* MENYA NEZA AI — readable answer heading and validation evidence */
+.mn-ai-answer-heading {
+  display: block;
+  margin-top: 0.35rem;
+  line-height: 1.35;
+}
+
+.mn-ai-quality-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.8rem 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  border-radius: 12px;
+  background: rgba(127, 127, 127, 0.06);
+}
+
+.mn-ai-quality-total span {
+  font-size: 0.9rem;
+}
+
+.mn-ai-quality-total strong {
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.mn-ai-quality-facts {
+  margin-top: 0;
+}
+
+
+/* MENYA NEZA AI — separate response title from header layout */
+.mn-home .mn-ai-answer-heading > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.mn-home .mn-ai-answer-heading .mn-ai-answer-title {
+  display: block;
+  margin: 0.25rem 0 0;
+  line-height: 1.35;
+  white-space: normal;
+}

@@ -1062,7 +1062,7 @@ function App() {
                         <span className="mn-ai-answer-icon" aria-hidden="true">✳</span>
                         <div>
                           <span className="mn-ai-eyebrow">{t("MENYA NEZA RESPONSE", "IGISUBIZO CYA MENYA NEZA")}</span>
-                          <strong>{t("Evidence-based answer", "Igisubizo gishingiye ku bimenyetso")}</strong>
+                          <strong className="mn-ai-answer-title">{t("Evidence-based answer", "Igisubizo gishingiye ku bimenyetso")}</strong>
                         </div>
                         <span className={`mn-ai-result-status mn-ai-result-${String(askResult.status || "result").replace(/[^a-z0-9_-]/gi, "")}`}>
                           {String(askResult.status || t("Response", "Igisubizo")).replaceAll("_", " ")}
@@ -1136,10 +1136,85 @@ function App() {
                               const hasBasicFacts = fields.some(
                                 ([key]) => item?.[key] != null && item[key] !== ""
                               );
+                              const hasQualitySummary = Boolean(
+                                Number.isFinite(Number(item?.records_returned)) &&
+                                item?.status_counts &&
+                                typeof item.status_counts === "object"
+                              );
+                              const qualityStatusLabels = {
+                                INCOMPLETE_DISTRICT_DATA: {
+                                  en: "Incomplete district data",
+                                  rw: "Amakuru y'uturere atuzuye",
+                                },
+                                SMALL_DIFFERENCE_REVIEW: {
+                                  en: "Small differences to review",
+                                  rw: "Itandukaniro rito rigomba gusuzumwa",
+                                },
+                                MATCH: {
+                                  en: "Matching values",
+                                  rw: "Imibare ihuye",
+                                },
+                                LARGE_DIFFERENCE_REVIEW: {
+                                  en: "Large differences to review",
+                                  rw: "Itandukaniro rinini rigomba gusuzumwa",
+                                },
+                              };
+                              const qualityStatusOrder = [
+                                "INCOMPLETE_DISTRICT_DATA",
+                                "SMALL_DIFFERENCE_REVIEW",
+                                "MATCH",
+                                "LARGE_DIFFERENCE_REVIEW",
+                              ];
 
                               return (
                                 <article className="mn-ai-evidence-card" key={index}>
-                                  {referenceIndicators ? (
+                                  {hasQualitySummary ? (
+                                    <>
+                                      <div className="mn-ai-evidence-card-heading">
+                                        <span className="mn-ai-evidence-symbol">✓</span>
+                                        <div>
+                                          <span className="mn-ai-detail-label">
+                                            {t("DATA-QUALITY VALIDATION", "IGENZURA RY'UBWIZA BW'AMAKURU")}
+                                          </span>
+                                          <h4>{t("Validation results", "Ibyavuye mu igenzura")}</h4>
+                                        </div>
+                                      </div>
+
+                                      <div className="mn-ai-quality-total">
+                                        <span>{t("Validation records reviewed", "Inyandiko zasuzumwe")}</span>
+                                        <strong>
+                                          {new Intl.NumberFormat(rw ? "rw-RW" : "en-US")
+                                            .format(Number(item.records_returned))}
+                                        </strong>
+                                      </div>
+
+                                      <dl className="mn-ai-evidence-facts mn-ai-quality-facts">
+                                        {Object.entries(item.status_counts)
+                                          .sort(([a], [b]) => {
+                                            const ai = qualityStatusOrder.indexOf(a);
+                                            const bi = qualityStatusOrder.indexOf(b);
+                                            return (ai < 0 ? qualityStatusOrder.length : ai) -
+                                              (bi < 0 ? qualityStatusOrder.length : bi);
+                                          })
+                                          .map(([status, count]) => {
+                                            const labels = qualityStatusLabels[status];
+                                            return (
+                                              <div key={status}>
+                                                <dt>
+                                                  {labels
+                                                    ? (rw ? labels.rw : labels.en)
+                                                    : status.replaceAll("_", " ").toLowerCase()}
+                                                </dt>
+                                                <dd>
+                                                  {new Intl.NumberFormat(rw ? "rw-RW" : "en-US")
+                                                    .format(Number(count))}
+                                                </dd>
+                                              </div>
+                                            );
+                                          })}
+                                      </dl>
+                                    </>
+                                  ) : referenceIndicators ? (
                                     <>
                                       <div className="mn-ai-evidence-card-heading">
                                         <span className="mn-ai-evidence-symbol">◎</span>
@@ -1258,7 +1333,11 @@ function App() {
                       {askResult.limitation && (
                         <div className="mn-ai-limitation">
                           <strong>{t("Limitations", "Imbogamizi")}</strong>
-                          <p>{renderAskValue(askResult.limitation)}</p>
+                          <p>
+                            {rw && askEvidence.some((item) => item?.status_counts)
+                              ? "Ibi byiciro byerekana ibyavuye mu igenzura ry'amakuru; si ibyiciro by'ibyago by'ubuhinzi."
+                              : renderAskValue(askResult.limitation)}
+                          </p>
                         </div>
                       )}
 

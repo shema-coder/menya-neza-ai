@@ -744,10 +744,20 @@ def answer_question(
             f"{name}: {count}" for name, count in counts.items()
         )
         if language_code in {"rw", "kin", "kinyarwanda"}:
+            quality_labels_rw = {
+                "INCOMPLETE_DISTRICT_DATA": "Amakuru y'uturere atuzuye",
+                "SMALL_DIFFERENCE_REVIEW": "Itandukaniro rito rigomba gusuzumwa",
+                "MATCH": "Imibare ihuye",
+                "LARGE_DIFFERENCE_REVIEW": "Itandukaniro rinini rigomba gusuzumwa",
+            }
+            counts_text_rw = ", ".join(
+                f"{quality_labels_rw.get(name, name)}: {count}"
+                for name, count in counts.items()
+            )
             answer = (
                 f"Igenzura ry'ubwiza bw'amakuru ryasuzumye "
                 f"inyandiko {quality['records_returned']}. "
-                f"Ibyiciro byabonetse: {counts_text}. "
+                f"Ibyiciro byabonetse: {counts_text_rw}. "
                 "Ibi ni ibyavuye mu igenzura ry'amakuru, "
                 "si igipimo cy'ibyago by'ubuhinzi."
             )
