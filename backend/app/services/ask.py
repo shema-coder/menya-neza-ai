@@ -58,7 +58,7 @@ def _find_crop(question: str) -> str | None:
 
 
 def _find_season(question: str) -> str | None:
-    """Recognize season references in English and Kinyarwanda."""
+    """Recognize season labels and natural Kinyarwanda ordinal forms."""
     patterns = (
         r"\bseason\s*([abc])\b",
         r"\b([abc])\s*season\b",
@@ -70,6 +70,22 @@ def _find_season(question: str) -> str | None:
         match = re.search(pattern, question, re.IGNORECASE)
         if match:
             return match.group(1).upper()
+
+    ordinal_patterns = (
+        r"\b(?:igihembwe|gihembwe)\s+cya\s*(1|2|3)\b",
+        r"\b(?:igihembwe|gihembwe)\s+cya\s+(mbere|kabiri|gatatu)\b",
+        r"\b(?:igihembwe|gihembwe)\s+(mbere|kabiri|gatatu)\b",
+    )
+    season_map = {
+        "1": "A", "mbere": "A",
+        "2": "B", "kabiri": "B",
+        "3": "C", "gatatu": "C",
+    }
+
+    for pattern in ordinal_patterns:
+        match = re.search(pattern, question, re.IGNORECASE)
+        if match:
+            return season_map[match.group(1).casefold()]
 
     return None
 
@@ -86,7 +102,7 @@ def _find_district(question: str) -> str | None:
 def answer_question(question: str, language: str = "en") -> dict[str, Any]:
     """Answer supported production and data-quality questions with evidence."""
     original = question.strip()
-    text = original.casefold()
+    text = original.casefold().replace("’", "'").replace("‘", "'")
 
     if not original:
         return {
@@ -330,45 +346,238 @@ def answer_question(question: str, language: str = "en") -> dict[str, Any]:
             "limitation": LIMITATION,
         }
 
-    # Highest reported district for a crop in a season.
-    if crop and season and any(term in text for term in
-                               ("highest", "most", "top", "largest",
-                                "leading", "which district")):
-        result = agriculture.supply_origins(
-            crop=crop, season=season, year=year
-        )
-        ranked = [
-            item for item in result.get("districts", [])
-            if item.get("rank") is not None and item.get("production_mt") is not None
-        ]
-        if not ranked:
+    # Highest reported district, with natural Kinyarwanda wording.
+    highest_terms = (
+        "highest", "most", "top", "largest", "leading", "which district",
+        "akahe karere", "akarere katanze", "byinshi", "umusaruro mwinshi",
+        "byinshi kurusha", "ni akahe", "ku isonga", "yayoboye",
+    )
+
+    if crop and any(term in text for term in highest_terms):
+        seasons_to_check = [season] if season else ["A", "B", "C"]
+        leaders = []
+
+        for season_code in seasons_to_check:
+            origins = agriculture.supply_origins(
+                crop=crop, season=season_code, year=year
+            )
+            ranked = [
+                item for item in origins.get("districts", [])
+                if item.get("rank") is not None
+                and item.get("production_mt") is not None
+            ]
+            if ranked:
+                leader = dict(ranked[0])
+                leader.update({
+                    "crop": crop,
+                    "season": season_code,
+                    "year": year,
+                })
+                leaders.append(leader)
+
+        if not leaders:
             return {
                 "status": "no_data",
-                "answer": f"No reported district values were available for {crop}, Season {season}, {year}.",
+                "answer": (
+                    f"No reported district values were available for "
+                    f"{crop}, {year}."
+                ),
                 "evidence": [],
                 "source": SOURCE,
+                "limitation": LIMITATION,
             }
 
-        top = ranked[0]
+        language_rw = language.casefold().strip() in {
+            "rw", "kin", "kinyarwanda"
+        }
+        crop_rw = {
+            "maize": "ibigori",
+            "beans": "ibishyimbo",
+            "cassava": "imyumbati",
+            "irish potatoes": "ibirayi",
+            "sweet potatoes": "ibijumba",
+            "banana": "ibitoki",
+            "sorghum": "amasaka",
+            "wheat": "ingano",
+            "vegetables": "imboga",
+        }.get(crop.casefold(), crop)
+
+        if season:
+            leader = leaders[0]
+            if language_rw:
+                answer = (
+                    f"Akarere ka {leader['district']} kagaragaje umusaruro "
+                    f"munini kurusha utundi watangajwe w'{crop_rw} mu gihembwe "
+                    f"{season} cya {year}: toni "
+                    f"{_number(leader['production_mt'])}. "
+                    "Ibi bigereranya imibare yatangajwe, si umusaruro w'ubu."
+                )
+            else:
+                answer = (
+                    f"{leader['district']} had the highest reported {crop} "
+                    f"production in Season {season} {year}, at "
+                    f"{_number(leader['production_mt'])} metric tonnes. "
+                    "This ranks reported survey values, not current supply."
+                )
+        else:
+            if language_rw:
+                lines = [
+                    f"Igihembwe {item['season']}: Akarere ka "
+                    f"{item['district']} ni ko kagaragaje umusaruro "
+                    f"munini watangajwe w'{crop_rw}, toni "
+                    f"{_number(item['production_mt'])}."
+                    for item in leaders
+                ]
+                answer = (
+                    f"Uturere twagaragaje umusaruro munini w'{crop_rw} "
+                    f"muri {year}, kuri buri gihembwe:\n"
+                    + "\n".join(lines)
+                    + "\n\nIcyitonderwa: ibi bihembwe byerekanwe ukwabyo; "
+                    "ntibiteranyijwe ngo byitwe umusaruro wose w'umwaka."
+                )
+            else:
+                lines = [
+                    f"Season {item['season']}: {item['district']} had the "
+                    f"highest reported value, "
+                    f"{_number(item['production_mt'])} metric tonnes."
+                    for item in leaders
+                ]
+                answer = (
+                    f"Highest reported district for {crop} in {year}, "
+                    "shown separately by season:\n"
+                    + "\n".join(lines)
+                    + "\n\nSeasons are not added together as an annual total."
+                )
+
         return {
             "status": "answered",
-            "answer": (
-                f"{top['district']} had the highest reported {crop} production "
-                f"in Season {season} {year}, at "
-                f"{_number(top['production_mt'])} metric tonnes. "
-                "This ranks reported survey values, not current market supply."
-            ),
-            "evidence": [top],
+            "answer": answer,
+            "evidence": leaders,
             "source": SOURCE,
             "limitation": LIMITATION,
         }
 
-    # General data-quality questions.
-    if any(term in text for term in
-           ("data quality", "missing data", "missing records",
-            "incomplete", "validation", "reliable", "reliability",
-            "ubwiza bw'amakuru", "amakuru atuzuye", "amakuru abura",
-            "imbogamizi z'ubwiza", "kwizerwa kw'amakuru")):
+    # If no season is specified, show the district's separate seasonal records.
+    if crop and district and not season:
+        rows = agriculture.filter_production(
+            district=district, crop=crop, year=year
+        )
+        if rows:
+            rows_by_season = {
+                item.get("season"): item
+                for item in rows
+                if item.get("season") in {"A", "B", "C"}
+            }
+            evidence = [
+                {
+                    "district": item.get("district"),
+                    "crop": item.get("crop"),
+                    "season": item.get("season"),
+                    "year": item.get("year"),
+                    "season_period": item.get("season_period"),
+                    "production_mt": item.get("production_mt"),
+                    "source": item.get("source", SOURCE),
+                    "source_table": item.get("source_table"),
+                    "source_page": item.get("source_page"),
+                    "value_status": item.get("source_value_status"),
+                }
+                for item in rows_by_season.values()
+            ]
+
+            language_rw = language.casefold().strip() in {
+                "rw", "kin", "kinyarwanda"
+            }
+            crop_rw = {
+                "maize": "ibigori",
+                "beans": "ibishyimbo",
+                "cassava": "imyumbati",
+                "irish potatoes": "ibirayi",
+                "sweet potatoes": "ibijumba",
+                "banana": "ibitoki",
+                "sorghum": "amasaka",
+                "wheat": "ingano",
+                "vegetables": "imboga",
+            }.get(crop.casefold(), crop)
+
+            lines = []
+            for season_code in ("A", "B", "C"):
+                item = rows_by_season.get(season_code)
+                if item is None:
+                    lines.append(
+                        f"Igihembwe {season_code}: nta nyandiko iboneka."
+                        if language_rw
+                        else f"Season {season_code}: no record found."
+                    )
+                elif item.get("production_mt") is None:
+                    lines.append(
+                        f"Igihembwe {season_code}: umusaruro ntiwatangajwe; "
+                        "kubura amakuru ntibivuze zeru."
+                        if language_rw
+                        else f"Season {season_code}: production was not reported; "
+                        "missing does not mean zero."
+                    )
+                else:
+                    lines.append(
+                        f"Igihembwe {season_code}: toni "
+                        f"{_number(item['production_mt'])}."
+                        if language_rw
+                        else f"Season {season_code}: "
+                        f"{_number(item['production_mt'])} metric tonnes."
+                    )
+
+            if language_rw:
+                answer = (
+                    f"Umusaruro w'{crop_rw} mu karere ka {district} "
+                    f"mu mwaka wa {year}:\n"
+                    + "\n".join(lines)
+                    + "\n\nIcyitonderwa: amakuru ya buri gihembwe atandukanye; "
+                    "ntiyateranyijwe ngo yitwe igiteranyo cy'umwaka."
+                )
+            else:
+                answer = (
+                    f"Reported {crop} production in {district} during {year}:\n"
+                    + "\n".join(lines)
+                    + "\n\nSeasonal figures are listed separately, not summed "
+                    "into an annual total."
+                )
+
+            return {
+                "status": "answered",
+                "answer": answer,
+                "evidence": evidence,
+                "source": SOURCE,
+                "limitation": LIMITATION,
+            }
+
+    # General data-quality questions in English and Kinyarwanda.
+    # Match against the original question as well as normalized text.
+    # This prevents other intent processing from hiding quality keywords.
+    quality_text = " ".join(
+        f"{original} {text}".casefold()
+        .replace("’", "'")
+        .replace("‘", "'")
+        .split()
+    )
+
+    quality_terms = (
+        "data quality", "missing data", "missing records",
+        "incomplete", "validation", "reliable", "reliability",
+        "ubwiza bw'amakuru", "amakuru atuzuye", "amakuru abura",
+        "imbogamizi z'ubwiza", "kwizerwa kw'amakuru",
+        "ibibazo biri mu bwiza", "ibibazo by'ubwiza",
+        "amakuru yizewe", "aya makuru yizewe",
+        "ibura ry'amakuru", "amakuru adahagije",
+    )
+    is_quality_question = (
+        any(term in quality_text for term in quality_terms)
+        or (
+            "amakuru" in quality_text
+            and any(term in quality_text for term in (
+                "ibibazo", "ubwiza", "kwizerwa", "atuzuye", "abura"
+            ))
+        )
+    )
+    if is_quality_question:
         quality = agriculture.data_quality(season=season, crop=crop)
         quality_answer = (
             f"The data-quality check returned {quality['records_returned']} "
@@ -455,7 +664,11 @@ def _localize_district_production(
 ) -> dict[str, Any]:
     """Render an evidence-backed district production answer in Kinyarwanda."""
     evidence = result.get("evidence") or []
-    if not evidence or not isinstance(evidence[0], dict):
+    if (
+        result.get("status") != "answered"
+        or len(evidence) != 1
+        or not isinstance(evidence[0], dict)
+    ):
         return result
 
     row = evidence[0]
@@ -505,6 +718,57 @@ def answer_question(
     """Answer questions and resolve supported contextual follow-ups."""
     language_code = str(language or "en").casefold().strip()
     original = str(question or "").strip()
+
+    # Early, explicit dispatch for data-quality questions.
+    quality_text = " ".join(
+        original.casefold().replace("’", "'").replace("‘", "'").split()
+    )
+    quality_words = set(
+        quality_text.replace("'", " ").replace("?", " ").replace(".", " ").split()
+    )
+    is_quality_question = (
+        {"amakuru", "bibazo", "bwiza"}.issubset(quality_words)
+        or {"amakuru", "ubwiza"}.issubset(quality_words)
+        or {"amakuru", "kwizerwa"}.issubset(quality_words)
+        or {"amakuru", "atuzuye"}.issubset(quality_words)
+        or {"amakuru", "abura"}.issubset(quality_words)
+        or any(term in quality_text for term in (
+            "data quality", "missing data", "missing records",
+            "incomplete", "validation", "reliability",
+        ))
+    )
+    if is_quality_question:
+        quality = agriculture.data_quality()
+        counts = quality["status_counts"]
+        counts_text = ", ".join(
+            f"{name}: {count}" for name, count in counts.items()
+        )
+        if language_code in {"rw", "kin", "kinyarwanda"}:
+            answer = (
+                f"Igenzura ry'ubwiza bw'amakuru ryasuzumye "
+                f"inyandiko {quality['records_returned']}. "
+                f"Ibyiciro byabonetse: {counts_text}. "
+                "Ibi ni ibyavuye mu igenzura ry'amakuru, "
+                "si igipimo cy'ibyago by'ubuhinzi."
+            )
+        else:
+            answer = (
+                f"The data-quality check examined "
+                f"{quality['records_returned']} validation records. "
+                f"Status counts: {counts_text}. These are data-quality "
+                "findings, not agricultural risk levels."
+            )
+        return {
+            "status": "answered",
+            "answer": answer,
+            "evidence": [{
+                "records_returned": quality["records_returned"],
+                "status_counts": counts,
+            }],
+            "source": quality.get("source", SOURCE),
+            "limitation": quality.get("note"),
+        }
+
 
     previous_hint = latest_record_context(conversation)
     crop = _find_crop(original.casefold())
@@ -672,13 +936,20 @@ def answer_question(
 
     # Exact stored questions remain available, but are not required.
     stored = lookup_question(original, language=language_code)
-    if stored and language_code in {"rw", "kin", "kinyarwanda"}:
-        return stored["response"]
 
+    # Prefer rule-based intent handling and verified local data first.
+    # The question bank is a fallback, not an override for supported intents.
     result = _rule_based_answer_question(original, language_code)
 
-    if stored and result.get("status") in {"unsupported", "no_data"}:
-        result = stored["response"]
+    if stored and result.get("status") in {
+        "unsupported", "no_data", "needs_clarification"
+    }:
+        stored_response = stored.get("response")
+        if (
+            isinstance(stored_response, dict)
+            and stored_response.get("status") == "answered"
+        ):
+            result = stored_response
 
     if language_code in {"rw", "kin", "kinyarwanda"}:
         result = _localize_district_production(result)
