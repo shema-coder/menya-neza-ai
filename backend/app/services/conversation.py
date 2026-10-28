@@ -110,6 +110,7 @@ def is_contextual_follow_up(
         "kurusha",
         "igihembwe",
         "gihembwe",
+        "igihembo",
     )
 
     if any(phrase in text for phrase in follow_up_phrases):
@@ -164,6 +165,13 @@ def compare_records(
     current_season = current.get("season")
     district = previous.get("district")
     crop = previous.get("crop")
+    crop_rw = {
+        "maize": "ibigori", "beans": "ibishyimbo",
+        "cassava": "imyumbati", "irish potatoes": "ibirayi",
+        "sweet potatoes": "ibijumba", "banana": "ibitoki",
+        "sorghum": "amasaka", "wheat": "ingano",
+        "vegetables": "imboga",
+    }.get(str(crop or "").casefold(), crop)
     year = previous.get("year")
 
     evidence = [
@@ -179,7 +187,7 @@ def compare_records(
         )
         if language.casefold() in {"rw", "kin", "kinyarwanda"}:
             answer = (
-                f"Umubare w'umusaruro w'{crop} mu karere ka {district} "
+                f"Umubare w'umusaruro w'{crop_rw} mu karere ka {district} "
                 f"ntiwuzuye mu bihembwe {previous_season} na {current_season}. "
                 "Ntabwo bishoboka kubara itandukaniro ryizewe; kubura "
                 "kw'umubare ntibisobanura ko umusaruro wari zeru."
@@ -207,11 +215,12 @@ def compare_records(
             f"{ _format_number(current_number) })."
         )
         rw_answer = (
-            f"Mu karere ka {district}, umusaruro w' {crop} watangajwe "
-            f"mu gihembwe {previous_season} warenze uw'igihembwe "
-            f"{current_season}ho toni {amount} "
-            f"({_format_number(previous_number)} ugereranyije na "
-            f"{_format_number(current_number)})."
+            f"Mu karere ka {district}, umusaruro w'{crop_rw} watangajwe "
+            f"mu gihembwe {previous_season} wari toni "
+            f"{_format_number(previous_number)}, mu gihembwe "
+            f"{current_season} wari toni {_format_number(current_number)}. "
+            f"Itandukaniro ni toni {amount}; igihembwe "
+            f"{previous_season} ni cyo cyagize umusaruro munini watangajwe."
         )
     elif difference < 0:
         en_answer = (
@@ -222,11 +231,12 @@ def compare_records(
             f"{ _format_number(previous_number) })."
         )
         rw_answer = (
-            f"Mu karere ka {district}, umusaruro w' {crop} watangajwe "
-            f"mu gihembwe {current_season} warenze uw'igihembwe "
-            f"{previous_season}ho toni {amount} "
-            f"({_format_number(current_number)} ugereranyije na "
-            f"{_format_number(previous_number)})."
+            f"Mu karere ka {district}, umusaruro w'{crop_rw} watangajwe "
+            f"mu gihembwe {previous_season} wari toni "
+            f"{_format_number(previous_number)}, mu gihembwe "
+            f"{current_season} wari toni {_format_number(current_number)}. "
+            f"Itandukaniro ni toni {amount}; igihembwe "
+            f"{current_season} ni cyo cyagize umusaruro munini watangajwe."
         )
     else:
         en_answer = (
@@ -235,7 +245,7 @@ def compare_records(
             f"{_format_number(previous_number)} metric tonnes in each."
         )
         rw_answer = (
-            f"Mu karere ka {district}, umusaruro w' {crop} watangajwe "
+            f"Mu karere ka {district}, umusaruro w'{crop_rw} watangajwe "
             f"wari ungana mu bihembwe {previous_season} na {current_season}: "
             f"toni {_format_number(previous_number)} muri buri gihembwe."
         )
@@ -266,5 +276,6 @@ def compare_records(
             "comparison_season": current_season,
             "comparison_production_mt": current_number,
             "difference_mt": difference,
+            "absolute_difference_mt": abs(difference),
         },
     }

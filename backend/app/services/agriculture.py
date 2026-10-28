@@ -532,9 +532,11 @@ def seasonal_comparison(
         if name and season:
             crop_seasons.setdefault(str(name), set()).add(str(season))
 
+    # Include every crop with a record in at least one of Seasons A, B or C.
+    # A crop must not disappear from the selector just because one season is missing.
     available_crops = sorted(
         name for name, seasons in crop_seasons.items()
-        if set(seasons_order).issubset(seasons)
+        if seasons.intersection(seasons_order)
     )
 
     result: dict[str, Any] = {
@@ -559,6 +561,13 @@ def seasonal_comparison(
     if crop is None or crop not in available_crops:
         return result
 
+    period_by_season: dict[str, str] = {}
+    for summary in summaries:
+        season_name = summary.get("season")
+        period = summary.get("season_period")
+        if season_name in seasons_order and period:
+            period_by_season.setdefault(str(season_name), str(period))
+
     summaries_by_season = {
         row["season"]: row
         for row in summaries
@@ -567,12 +576,29 @@ def seasonal_comparison(
 
     for season in seasons_order:
         row = summaries_by_season.get(season)
+
         if row is None:
+            # Keep the season visible. Missing records are not zero production.
+            result["seasons"].append({
+                "season": season,
+                "season_period": period_by_season.get(season),
+                "record_available": False,
+                "reported_district_subtotal_mt": None,
+                "reported_districts": None,
+                "expected_districts": None,
+                "missing_districts": None,
+                "district_coverage_percent": None,
+                "published_national_mt": None,
+                "validation_status": "NO_RECORD",
+                "source_table": None,
+                "source_page": None,
+            })
             continue
 
         result["seasons"].append({
             "season": season,
             "season_period": row.get("season_period"),
+            "record_available": True,
             "reported_district_subtotal_mt": row.get(
                 "reported_district_sum_mt"
             ),

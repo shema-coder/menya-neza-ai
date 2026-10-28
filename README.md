@@ -64,3 +64,11 @@ Run backend tests from the repository root with:
 Build the frontend from the `frontend` directory with:
 
 `npm run build`
+
+## Esoko Rwanda market-price source
+
+- Source: [Esoko Rwanda eSoko Price Trends](https://esoko.rw/price-trends).
+- Imported snapshot: `data/processed/esoko_market_price_observations.csv` (908 source rows, observed 26–27 October 2026).
+- API: `/api/v1/market-prices/esoko/status` and `/api/v1/market-prices/esoko-observations`.
+- Ask AI uses exact product/market observations where matched; TangaBid monthly summaries remain separate. This is a manual snapshot, not live scraping.
+- Important limitation: this export does not include unit, province, or district columns. Missing prices remain missing and are never converted to zero.

@@ -11,12 +11,13 @@ class SeasonalComparisonTests(unittest.TestCase):
     def setUpClass(cls):
         cls.client = TestClient(app)
 
-    def test_eligible_crop_list_contains_only_three_season_crops(self):
+    def test_available_crop_list_includes_partial_season_coverage(self):
         result = agriculture.seasonal_comparison(year=2025)
 
         self.assertTrue(result["available_crops"])
         self.assertIn("Beans", result["available_crops"])
         self.assertIn("Irish potatoes", result["available_crops"])
+        self.assertIn("Maize", result["available_crops"])
         self.assertEqual(result["seasons"], [])
 
     def test_irish_potatoes_returns_seasons_in_order(self):
@@ -61,13 +62,34 @@ class SeasonalComparisonTests(unittest.TestCase):
             ["A", "B", "C"],
         )
 
-    def test_api_rejects_crop_not_available_in_all_seasons(self):
+    def test_api_accepts_crop_with_missing_season_record(self):
         response = self.client.get(
             "/api/v1/production/seasonal-comparison",
             params={"crop": "Maize", "year": 2025},
         )
 
-        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["eligible"])
+
+        seasons = body["seasons"]
+        self.assertEqual(
+            [row["season"] for row in seasons],
+            ["A", "B", "C"],
+        )
+
+        missing = [
+            row for row in seasons
+            if row.get("record_available") is False
+        ]
+        self.assertTrue(
+            missing,
+            "Maize should have an explicit missing-season entry in this dataset.",
+        )
+
+        for row in missing:
+            self.assertIsNone(row["reported_district_subtotal_mt"])
+            self.assertEqual(row["validation_status"], "NO_RECORD")
 
     def test_notes_explain_comparison_limitations(self):
         result = agriculture.seasonal_comparison(

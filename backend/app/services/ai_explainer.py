@@ -6,9 +6,15 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from openai import OpenAI
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+
+
+def _create_client(api_key: str) -> Any:
+    """Load the optional SDK only when an explanation is actually requested."""
+    from openai import OpenAI
+
+    return OpenAI(api_key=api_key, max_retries=0, timeout=12.0)
 
 
 def generate_explanation(
@@ -57,7 +63,7 @@ def generate_explanation(
     }
 
     try:
-        client = OpenAI(api_key=api_key, max_retries=0, timeout=12.0)
+        client = _create_client(api_key)
         response = client.responses.create(
             model=os.getenv("OPENAI_MODEL", "gpt-6-luna"),
             instructions=(

@@ -1,6 +1,8 @@
+import os
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from .services import agriculture, intelligence, tangabid
 
@@ -13,6 +15,28 @@ app = FastAPI(
     version="0.2.0",
 )
 
+
+
+# MENYA NEZA DEPLOYMENT CORS
+_default_cors_origins = (
+    "http://localhost:5173,http://127.0.0.1:5173"
+)
+_allowed_cors_origins = [
+    origin.strip()
+    for origin in os.environ.get(
+        "MENYA_NEZA_CORS_ORIGINS",
+        _default_cors_origins,
+    ).split(",")
+    if origin.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
+)
 
 @app.get("/")
 def root() -> dict[str, Any]:
@@ -65,6 +89,40 @@ def get_supply_price_intelligence(
         year=year,
         district=district,
     )
+
+
+@app.get("/api/v1/market-prices/esoko/status")
+def get_esoko_market_price_source_status():
+    # Return metadata and limitations for the imported Esoko CSV snapshot.
+    from .services import esoko_source
+
+    return esoko_source.source_status()
+
+
+@app.get("/api/v1/market-prices/esoko-observations")
+def get_esoko_market_price_observations(
+    product: str | None = None,
+    location: str | None = None,
+    price_type: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    # Search dated Esoko observations without mixing them into monthly summaries.
+    from .services import esoko_source
+    from fastapi import HTTPException
+
+    try:
+        return esoko_source.search_observations(
+            product=product,
+            location=location,
+            price_type=price_type,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="Esoko snapshot is unavailable.") from exc
 
 
 @app.get("/api/v1/market-prices/trends")

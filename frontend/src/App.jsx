@@ -51,6 +51,21 @@ const fmt = (n) => new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1
 }).format(n);
 
+
+/* MENYA NEZA DEPLOYMENT API BASE */
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || ""
+).replace(/\/+$/, "");
+
+function apiFetch(input, init) {
+  const target =
+    typeof input === "string" && input.startsWith("/api/")
+      ? `${API_BASE_URL}${input}`
+      : input;
+
+  return globalThis.fetch(target, init);
+}
+
 function App() {
   const [showWelcomeIntro, setShowWelcomeIntro] = useState(true);
 
@@ -75,15 +90,35 @@ function App() {
   const [analysisMenuOpen, setAnalysisMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const [language, setLanguage] = useState("rw");
+  const [language, setLanguage] = useState("en");
   const rw = language === "rw";
+
+  useEffect(() => {
+    document.documentElement.lang = rw ? "rw" : "en";
+  }, [rw]);
+
   const t = (en, rwText) => rw ? rwText : en;
 
   // MENYA NEZA AI question workspace
+  const [showEvidenceDetails, setShowEvidenceDetails] = useState(false);
   const [askDraft, setAskDraft] = useState("");
+  const [askHelpOpen, setAskHelpOpen] = useState(false);
   const [askResult, setAskResult] = useState(null);
   const [askLoading, setAskLoading] = useState(false);
   const [askError, setAskError] = useState("");
+
+  // Bring the new answer into view after Ask AI responds.
+  useEffect(() => {
+    if (!askResult) return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .getElementById("mn-ai-answer-card")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [askResult]);
   const [askHistory, setAskHistory] = useState([]);
   const fallbackAskSuggestions = [
     {
@@ -129,7 +164,7 @@ function App() {
               language,
               limit: "1",
             });
-            const response = await fetch(
+            const response = await apiFetch(
               `/api/v1/ask/knowledge/questions?${params.toString()}`
             );
 
@@ -178,7 +213,7 @@ function App() {
     setAskResult(null);
 
     try {
-      const response = await fetch("/api/v1/ask", {
+      const response = await apiFetch("/api/v1/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -366,7 +401,7 @@ function App() {
         season: String(record.season),
         year: String(record.year)
       });
-      const response = await fetch(
+      const response = await apiFetch(
         `/api/v1/supply/origins?${params.toString()}`
       );
 
@@ -409,7 +444,7 @@ function App() {
           district
         });
 
-        const response = await fetch(
+        const response = await apiFetch(
           `/api/v1/intelligence/supply-price?${params.toString()}`,
           { signal: controller.signal }
         );
@@ -452,7 +487,7 @@ function App() {
           if (value) params.set(key, value);
         });
 
-        const response = await fetch(
+        const response = await apiFetch(
           `/api/v1/market-prices/trends?${params.toString()}`,
           { signal: controller.signal }
         );
@@ -509,7 +544,7 @@ function App() {
           params.set("region", priceFilters.region);
         }
 
-        const response = await fetch(
+        const response = await apiFetch(
           `/api/v1/market-prices/trends?${params.toString()}`,
           { signal: controller.signal }
         );
@@ -579,7 +614,7 @@ function App() {
 
     async function loadApiData() {
       try {
-        const firstResponse = await fetch("/api/v1/production?limit=1000&offset=0");
+        const firstResponse = await apiFetch("/api/v1/production?limit=1000&offset=0");
         if (!firstResponse.ok) {
           throw new Error("CROP_DATA_LOAD_FAILED");
         }
@@ -589,7 +624,7 @@ function App() {
         const totalRecords = firstPage.total_matching_records;
 
         for (let offset = allRecords.length; offset < totalRecords; offset += 1000) {
-          const response = await fetch(
+          const response = await apiFetch(
             `/api/v1/production?limit=1000&offset=${offset}`
           );
           if (!response.ok) {
@@ -599,7 +634,7 @@ function App() {
           allRecords.push(...pageData.records);
         }
 
-        const qualityResponse = await fetch("/api/v1/data-quality");
+        const qualityResponse = await apiFetch("/api/v1/data-quality");
         if (!qualityResponse.ok) {
           throw new Error("DATA_QUALITY_LOAD_FAILED");
         }
@@ -655,7 +690,7 @@ function App() {
           season: originSeason,
           year: "2025"
         });
-        const response = await fetch(
+        const response = await apiFetch(
           `/api/v1/supply/origins?${params.toString()}`,
           { signal: controller.signal }
         );
@@ -698,7 +733,7 @@ function App() {
           crop: seasonalCrop,
           year: "2025"
         });
-        const response = await fetch(
+        const response = await apiFetch(
           `/api/v1/production/seasonal-comparison?${params.toString()}`,
           { signal: controller.signal }
         );
@@ -741,13 +776,16 @@ function App() {
   const reported = area.filter(r => r.source_value_status === "reported").length;
   const missing = area.length - reported;
   const max = Math.max(...crops.map(c => c.value), 1);
-  const completeChecks = checks.filter(c =>
-    c.validation_status !== "INCOMPLETE_DISTRICT_DATA"
+  const completeChecks = checks.filter(
+    c => c.district_sum_completeness === "COMPLETE"
+  ).length;
+  const partialChecks = checks.filter(
+    c => c.district_sum_completeness === "PARTIAL"
   ).length;
 
   // Reusable explanations that follow the selected interface language.
-  const ExplainThis = ({ en, rwText }) => (
-    <details className="explain-details">
+  const ExplainThis = ({ en, rwText, openByDefault = false }) => (
+    <details className="explain-details" open={openByDefault || undefined}>
       <summary>{t("What does this mean?", "Bisobanuye iki?")}</summary>
       <p>{rw ? rwText : en}</p>
     </details>
@@ -932,7 +970,9 @@ function App() {
       {page === "home" && (
         <main className="mn-home">
           <section className="home-hero">
-            <div className="home-ai-layout">
+        <div className="home-hero-vignette" aria-hidden="true" />
+        <div className="home-hero-content">
+<div className="home-ai-layout">
               <div className="home-copy">
                 <div className="eyebrow">
                   <span className="eyebrow-dot" />
@@ -996,43 +1036,166 @@ function App() {
               <span>{t("FOOD SYSTEMS", "URUNANA RW'IBIRIBWA")}</span><i />
               <span>{t("PREPAREDNESS", "KWITEGURA")}</span>
             </div>
-          </section>
+        </div>
+</section>
 
 
           <section className="home-assistant-section" aria-label="MENYA NEZA AI assistant">
-            <div className="home-assistant-intro">
-              <span className="home-assistant-spark" aria-hidden="true">✳</span>
-              <span>{t("EVIDENCE-GROUNDED AGRICULTURAL INTELLIGENCE", "UBWENGE BW'UBUHINZI BUSHINGIYE KU BIMENYETSO")}</span>
-            </div>
+
 
             <div className="mn-ai-workspace">
               <main className="mn-ai-conversation">
                 <header className="mn-ai-header">
                   <div className="mn-ai-identity">
-                    <div className="home-ai-logo-wrap mn-ai-logo">
+                    <div className="mn-ai-logo-transparent">
                       <img src="/menya-neza-ai-logo.png" alt="MENYA NEZA AI logo" />
                     </div>
                     <div>
                       <span className="mn-ai-eyebrow">{t("RWANDA AGRICULTURE DATA", "AMAKURU Y'UBUHINZI MU RWANDA")}</span>
-                      <h2>{t("Ask MENYA NEZA", "Baza MENYA NEZA")}</h2>
+                      <h2>{t("ASK MENYA NEZA AI", "BAZA MENYA NEZA AI")}</h2>
                       <p>{t("Ask a question. Get an answer grounded in available evidence.", "Baza ikibazo. Uhabwe igisubizo gishingiye ku bimenyetso biboneka.")}</p>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    className="mn-ai-help-trigger"
+                    onClick={() => setAskHelpOpen((open) => !open)}
+                    aria-expanded={askHelpOpen}
+                    aria-controls="mn-ai-help-panel"
+                  >
+                    <span aria-hidden="true">?</span>
+                    {t("Help & scope", "Ubufasha")}
+                  </button>
                   <span className="mn-ai-status">
                     <i aria-hidden="true" />
                     {t("DATA-BASED", "ISHINGIYE KU MAKURU")}
                   </span>
                 </header>
 
+                {askHelpOpen && (
+                  <section className="mn-ai-help-panel" id="mn-ai-help-panel" aria-label={t("Assistant help and scope", "Ubufasha n'imbibi by'umufasha")}>
+                    <div className="mn-ai-help-panel-heading">
+                      <div>
+                        <span className="mn-ai-detail-label">{t("ASSISTANT GUIDE", "UBUFASHA")}</span>
+                        <h3>{t("What can I ask?", "Ni ibihe bibazo nshobora kubaza?")}</h3>
+                        <p>{t("Choose an example to place it in the question box. You can edit it before sending.", "Hitamo urugero kugira ngo rwuzuze ahantu handikirwa ikibazo. Ushobora kuruhindura mbere yo kurwohereza.")}</p>
+                      </div>
+                      <button type="button" className="mn-ai-help-close" onClick={() => setAskHelpOpen(false)}>
+                        {t("Close", "Funga")} ×
+                      </button>
+                    </div>
+
+                    <div className="mn-ai-help-prompts">
+                      {askSuggestions.map((item) => (
+                        <button
+                          type="button"
+                          className="mn-ai-help-prompt"
+                          key={item.en}
+                          onClick={() => {
+                            setAskDraft(rw ? item.rwText : item.en);
+                            setAskHelpOpen(false);
+                          }}
+                        >
+                          <span className="home-suggestion-icon" aria-hidden="true">{item.icon}</span>
+                          <span>
+                            <b>{rw ? item.rwText : item.en}</b>
+                            <small>{t("Fill question", "Uzuza ikibazo")}</small>
+                          </span>
+                          <span aria-hidden="true">↗</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="mn-ai-help-scope">
+                      <span className="mn-ai-detail-label">{t("SUPPORTED QUESTION TYPES", "IBIBAZO ISHOBORA GUSUBIZA")}</span>
+                      <ul>
+                        <li>{t("Reported crop production by district, crop, season and year.", "Umusaruro w'ibihingwa watangajwe hakurikijwe akarere, igihingwa, igihembwe n'umwaka.")}</li>
+                        <li>{t("Seasonal comparisons and districts with the highest reported figures.", "Kugereranya ibihembwe no kugaragaza uturere dufite imibare yatangajwe iri hejuru.")}</li>
+                        <li>{t("Selected NST2 reference indicators available in the system.", "Ibipimo bimwe bya NST2 biboneka muri sisitemu.")}</li>
+                        <li>{t("Data-quality checks, missing information and source limitations.", "Igenzura ry'ubwiza bw'amakuru, amakuru abura n'imbogamizi z'inkomoko.")}</li>
+                      </ul>
+                    </div>
+
+                    <div className="mn-ai-help-limits">
+                      <strong>{t("What it cannot reliably answer", "Ibyo idashobora gusubiza mu buryo bwizewe")}</strong>
+                      <p>{t("It does not answer every topic. It does not provide verified live market prices, live weather forecasts, or official disaster warnings. Answers depend on the data available and its source limitations.", "Ntabwo isubiza ibibazo byose. Ntiyemeza ibiciro by'ubu ku masoko, iteganyagihe ry'ako kanya cyangwa imiburo yemewe y'ibiza. Ibisubizo biterwa n'amakuru ahari n'imbogamizi z'inkomoko yayo.")}</p>
+                    </div>
+
+                    {askHistory.length > 0 && (
+                      <div className="mn-ai-history">
+                        <div className="mn-ai-history-heading">
+                          <span className="mn-ai-detail-label">{t("THIS SESSION", "IKI GIKORWA")}</span>
+                          <button type="button" onClick={() => { setAskHistory([]); setAskResult(null); setAskError(""); }} disabled={askLoading}>
+                            {t("Clear", "Siba")}
+                          </button>
+                        </div>
+                        {askHistory.slice(-3).reverse().map((item) => (
+                          <button className="mn-ai-history-item" type="button" key={item.id} onClick={() => { setAskDraft(item.question); setAskResult(item.result); setAskError(""); setAskHelpOpen(false); }}>
+                            <span>{item.question}</span><span aria-hidden="true">↗</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )}
+
                 <div className="mn-ai-message-area" aria-live="polite" aria-busy={askLoading}>
                   {!askResult && !askLoading && !askError && (
                     <div className="mn-ai-empty-state">
-                      <div className="mn-ai-assistant-mark" aria-hidden="true">✳</div>
+                      <div className="mn-ai-assistant-mark" aria-hidden="true"></div>
                       <div className="mn-ai-welcome">
                         <span className="mn-ai-welcome-hello">Hello 👋</span>
                         <h3>{t("How can we help today?", "Tugufashe gute nonaha?")}</h3>
-                        <p>{t("Choose a topic or ask your own question.", "Hitamo ingingo cyangwa wandike ikibazo cyawe.")}</p>
-                      </div>
+                        <p>{t("Choose a topic or type your question.", "Hitamo ingingo cyangwa wandike ikibazo cyawe.")}</p>
+                        <p className="mn-ai-scope-note">
+                          {t(
+                            "MENYA NEZA AI does not answer every question. It focuses on historical crop production, district and season comparisons, selected NST2 indicators, and data quality.",
+                            "MENYA NEZA AI ntisubiza ibibazo byose. Yibanda ku musaruro w'ibihingwa wo mu bihe byashize, kugereranya uturere n'ibihembwe, ibipimo bimwe bya NST2, n'ubwiza bw'amakuru."
+                          )}
+                        </p>
+
+<div className="mn-ai-quick-prompts" aria-label="Suggested questions">
+  <button
+    type="button"
+    className="mn-ai-quick-prompt"
+    onClick={() => setAskDraft(t(
+      "Compare reported maize production by district in Season B 2025.",
+      "Gereranya umusaruro w'ibigori watangajwe mu turere mu gihembwe B cya 2025."
+    ))}
+  >
+    <span className="mn-ai-quick-prompt-icon" aria-hidden="true">↗</span>
+    <strong>{t("Compare districts", "Gereranya uturere")}</strong>
+    <span>{t("Explore reported crop production.", "Reba umusaruro w'ibihingwa watangajwe.")}</span>
+  </button>
+
+  <button
+    type="button"
+    className="mn-ai-quick-prompt"
+    onClick={() => setAskDraft(t(
+      "Which districts have missing or incomplete crop-production data?",
+      "Ni utuhe turere dufite amakuru y'umusaruro abura cyangwa atuzuye?"
+    ))}
+  >
+    <span className="mn-ai-quick-prompt-icon" aria-hidden="true">⌕</span>
+    <strong>{t("Check data quality", "Genzura ubwiza bw'amakuru")}</strong>
+    <span>{t("Find missing or incomplete values.", "Shaka imibare ibura cyangwa ituzuye.")}</span>
+  </button>
+
+  <button
+    type="button"
+    className="mn-ai-quick-prompt"
+    onClick={() => setAskDraft(t(
+      "Summarize the available market-price records and their limitations.",
+      "Vuga mu ncamake amakuru ahari ku biciro ku masoko n'imbogamizi zayo."
+    ))}
+  >
+    <span className="mn-ai-quick-prompt-icon" aria-hidden="true">◇</span>
+    <strong>{t("Explore market prices", "Reba ibiciro ku masoko")}</strong>
+    <span>{t("Review available records and limitations.", "Suzuma amakuru ahari n'imbogamizi zayo.")}</span>
+  </button>
+</div>
+
+</div>
                     </div>
                   )}
 
@@ -1057,9 +1220,9 @@ function App() {
                   )}
 
                   {askResult && (
-                    <article className="mn-ai-answer">
+                    <article id="mn-ai-answer-card" className="mn-ai-answer">
                       <div className="mn-ai-answer-heading">
-                        <span className="mn-ai-answer-icon" aria-hidden="true">✳</span>
+                        <span className="mn-ai-answer-icon" aria-hidden="true"></span>
                         <div>
                           <span className="mn-ai-eyebrow">{t("MENYA NEZA RESPONSE", "IGISUBIZO CYA MENYA NEZA")}</span>
                           <strong className="mn-ai-answer-title">{t("Evidence-based answer", "Igisubizo gishingiye ku bimenyetso")}</strong>
@@ -1353,7 +1516,8 @@ function App() {
                   <label className="mn-ai-sr-only" htmlFor="mn-ai-question">
                     {t("Your question", "Ikibazo cyawe")}
                   </label>
-                  <textarea
+                  <div className="mn-ai-input-shell">
+<textarea
                     id="mn-ai-question"
                     value={askDraft}
                     onChange={(event) => setAskDraft(event.target.value)}
@@ -1368,89 +1532,63 @@ function App() {
                     maxLength={1000}
                     disabled={askLoading}
                   />
-                  <button type="submit" disabled={askLoading || !askDraft.trim()} aria-label={t("Send question", "Ohereza ikibazo")}>
+                  <button type="submit" className="mn-ai-send-button" disabled={askLoading || !askDraft.trim()} aria-label={t("Send question", "Ohereza ikibazo")}>
                     {askLoading ? <span className="mn-ai-spinner mn-ai-spinner-light" /> : <span aria-hidden="true">↑</span>}
-                    <span>{t("Ask", "Baza")}</span>
+
                   </button>
+                  </div>
                   <div className="mn-ai-composer-hint">
                     {t("Enter to send · Shift + Enter for a new line", "Enter wohereza · Shift + Enter ugatangira umurongo mushya")}
                     <span>{askDraft.length}/1000</span>
                   </div>
                 </form>
-              </main>
+</main>
 
-              <aside className="mn-ai-side-panel">
-                <div className="mn-ai-side-heading">
-                  <span className="mn-ai-side-symbol" aria-hidden="true">✧</span>
-                  <div>
-                    <h3>{t("Explore a question", "Hitamo ikibazo")}</h3>
-                    <p>{t("Select a prompt to ask it directly.", "Hitamo ikibazo kugira ngo ugihite ubaza.")}</p>
-                  </div>
-                </div>
 
-                <div className="mn-ai-suggestions">
-                  {askSuggestions.map((item) => (
-                    <button
-                      type="button"
-                      key={item.en}
-                      onClick={() => submitAsk(rw ? item.rwText : item.en)}
-                      disabled={askLoading}
-                    >
-                      <span className="home-suggestion-icon" aria-hidden="true">{item.icon}</span>
-                      <span className="mn-ai-suggestion-copy">
-                        <b>{rw ? item.rwText : item.en}</b>
-                        <small>{t("Ask this question", "Baza iki kibazo")}</small>
-                      </span>
-                      <span className="home-suggestion-arrow" aria-hidden="true">↗</span>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mn-ai-coverage">
-                  <span className="mn-ai-detail-label">{t("CURRENT KNOWLEDGE", "AMAKURU AHARI")}</span>
-                  <div><i aria-hidden="true">✓</i><span>{t("Crop production records", "Imibare y'umusaruro w'ibihingwa")}</span></div>
-                  <div><i aria-hidden="true">✓</i><span>{t("District and season comparisons", "Kugereranya uturere n'ibihembwe")}</span></div>
-                  <div><i aria-hidden="true">✓</i><span>{t("Selected NST2 reference indicators", "Ibipimo bimwe bya NST2")}</span></div>
-                  <div><i aria-hidden="true">✓</i><span>{t("Data quality and limitations", "Ubwiza bw'amakuru n'imbogamizi")}</span></div>
-                  <div className="mn-ai-coverage-limited"><i aria-hidden="true">!</i><span>{t("No verified live weather or official warnings", "Nta iteganyagihe cyangwa miburo yemewe y'ako kanya")}</span></div>
-                </div>
-
-                {askHistory.length > 0 && (
-                  <div className="mn-ai-history">
-                    <div className="mn-ai-history-heading">
-                      <span className="mn-ai-detail-label">{t("THIS SESSION", "IKI GIKORWA")}</span>
-                      <button type="button" onClick={() => { setAskHistory([]); setAskResult(null); setAskError(""); }} disabled={askLoading}>
-                        {t("Clear", "Siba")}
-                      </button>
-                    </div>
-                    {askHistory.slice(-3).reverse().map((item) => (
-                      <button className="mn-ai-history-item" type="button" key={item.id} onClick={() => { setAskDraft(item.question); setAskResult(item.result); setAskError(""); }}>
-                        <span>{item.question}</span><span aria-hidden="true">↗</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </aside>
             </div>
           </section>
 
           <section className="home-evidence">
             <div className="home-evidence-heading">
-              <span className="section-kicker">{t("BUILT AROUND EVIDENCE", "ISHINGIYE KU BIMENYETSO")}</span>
+              <span className="section-kicker">{t("INTELLIGENCE BUILT ON EVIDENCE", "UBWENGE BWUBAKIYE KU BIMENYETSO")}</span>
               <h2>
                 {t("Intelligence you can", "Amakuru ushobora")}
                 <br />
-                <em>{t("inspect and understand.", "gusuzuma no gusobanukirwa.")}</em>
+                <em>{t("inspect, question, and understand.", "gusuzuma, kubaza no gusobanukirwa.")}</em>
               </h2>
               <p>
                 {t(
-                  "Not just numbers on a screen. Explore the source, understand the period, and see what the available evidence can—and cannot—tell you.",
-                  "Si imibare gusa iri kuri ecran. Reba inkomoko yayo, menya igihe yakusanyirijwe, kandi usobanukirwe n'ibyo amakuru ahari ashobora cyangwa adashobora kukubwira."
+                  "Every insight begins with a source. Explore reported figures, understand their time period, and discover what the available evidence can, and cannot, tell you.",
+                  "Buri mwumvire utangirira ku nkomoko y'amakuru. Suzuma imibare yatangajwe, menya igihe yakusanyirijwe, kandi usobanukirwe n'ibyo amakuru ahari ashobora n'ibyo adashobora kukubwira."
                 )}
               </p>
             </div>
 
-            <div className="home-evidence-grid">
+
+            <div className="home-evidence-actions">
+              <span className="home-evidence-count">
+                {t("06 WAYS TO EXPLORE · HISTORICAL EVIDENCE", "UBURYO 6 BWO GUSUZUMA · AMAKURU YO MU BIHE BYASHIZE")}
+              </span>
+              <button
+                type="button"
+                className="home-evidence-toggle"
+                aria-expanded={showEvidenceDetails}
+                aria-controls="home-evidence-grid"
+                onClick={() => setShowEvidenceDetails(open => !open)}
+              >
+                <span>
+                  {showEvidenceDetails
+                    ? t("Hide capabilities", "Hisha ubushobozi")
+                    : t("Explore the evidence", "Suzuma ibimenyetso")}
+                </span>
+                <span className="home-evidence-toggle-icon" aria-hidden="true">
+                  {showEvidenceDetails ? "−" : "→"}
+                </span>
+              </button>
+            </div>
+
+{showEvidenceDetails && (
+            <div className="home-evidence-grid" id="home-evidence-grid">
               <button className="home-evidence-card" onClick={() => navigate("area")}>
                 <span className="home-evidence-number">01</span>
                 <span className="home-evidence-icon">⌖</span>
@@ -1474,45 +1612,67 @@ function App() {
                 <p>{t("Inspect where production was reported, with incomplete district records clearly identified.", "Reba aho umusaruro watangajwe, unamenye uturere dufite imibare ituzuye.")}</p>
                 <span className="home-evidence-link">{t("Explore origins", "Reba aho umusaruro ukomoka")} →</span>
               </button>
+
+              <button className="home-evidence-card" onClick={() => navigate("insights")}>
+                <span className="home-evidence-number">04</span>
+                <span className="home-evidence-icon">✓</span>
+                <h3>{t("Check data quality", "Suzuma ubwiza bw'amakuru")}</h3>
+                <p>{t("Review missing values, incomplete district records, and figures requiring reconciliation.", "Reba amakuru abura, uturere dufite imibare ituzuye n'imibare igikeneye kugenzurwa.")}</p>
+                <span className="home-evidence-link">{t("Review data quality", "Suzuma ubwiza bw'amakuru")} →</span>
+              </button>
+
+              <button className="home-evidence-card" onClick={() => navigate("insights")}>
+                <span className="home-evidence-number">05</span>
+                <span className="home-evidence-icon">↗</span>
+                <h3>{t("Explore price trends", "Reba uko ibiciro byagiye bihinduka")}</h3>
+                <p>{t("Explore available historical food-price observations with their source and time limitations.", "Reba amakuru ahari ku biciro by'ibiribwa byo mu bihe byashize, uzirikana inkomoko n'igihe byakusanyirijwe.")}</p>
+                <span className="home-evidence-link">{t("Explore available insights", "Reba andi makuru")} →</span>
+              </button>
+
+              <button className="home-evidence-card" onClick={() => document.querySelector(".home-assistant-section")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                <span className="home-evidence-number">06</span>
+                <span className="home-evidence-icon">◎</span>
+                <h3>{t("Ask with evidence", "Baza ushingiye ku makuru")}</h3>
+                <p>{t("Ask MENYA NEZA AI about supported production data, seasonal comparisons, and data quality.", "Baza MENYA NEZA AI ku musaruro watangajwe, igereranya ry'ibihembwe n'ubwiza bw'amakuru.")}</p>
+                <span className="home-evidence-link">{t("Ask MENYA NEZA AI", "Baza MENYA NEZA AI")} →</span>
+              </button>
+
             </div>
+          )}
           </section>
 
-          <section className="home-method">
-            <div className="home-method-copy">
-              <span className="section-kicker">{t("FROM DATA TO EARLY ACTION", "DUHERE KU MAKURU TUGERE KU KWITEGURA")}</span>
-              <h2>{t("Understand the evidence.", "Sobanukirwa n'ibimenyetso.")}<br /><em>{t("Know its limits.", "Menya aho bigarukira.")}</em></h2>
-              <p>
+          <section className="home-method home-method-minimal home-method-compact">
+            <div className="home-method-minimal-copy home-method-compact-copy">
+              <span className="section-kicker">
+                {t("FROM DATA TO EARLY ACTION", "DUHERE KU MAKURU TUGERE KU KWITEGURA")}
+              </span>
+              <h2>
+                {t("Understand the evidence.", "Sobanukirwa n'ibimenyetso.")}
+                {" "}
+                <em>{t("Know its limits.", "Menya aho bigarukira.")}</em>
+              </h2>
+              <p className="home-method-compact-description">
                 {t(
-                  "Our approach connects data exploration with clear explanations. As the platform grows, new risk information must be sourced and validated before it can support warnings or recommendations.",
-                  "Uburyo dukoresha buhuza gushakisha amakuru no kuyasobanura neza. Uko urubuga ruzagenda rwaguka, amakuru mashya ku byago agomba kubanza kubona inkomoko no kwemezwa mbere yo gukoreshwa mu miburo cyangwa inama."
+                  "Explore the evidence. Understand the context. Make informed decisions.",
+                  "Suzuma ibimenyetso. Sobanukirwa n'imiterere yabyo. Fata ibyemezo uzi amakuru."
                 )}
               </p>
-              <button className="principle-link" onClick={() => navigate("about")}>
-                {t("How MENYA NEZA works", "Uko MENYA NEZA ikora")} <span>→</span>
-              </button>
             </div>
 
-            <div className="home-method-steps">
-              {[
-                ["01", "DATA", "Start with traceable information.", "Tangira ku makuru afite inkomoko izwi."],
-                ["02", "DETECT", "Identify patterns the data supports.", "Menya imiterere igaragazwa n'amakuru."],
-                ["03", "EXPLAIN", "Show the evidence and uncertainty.", "Garagaza ibimenyetso n'ibitaramenyekana."],
-                ["04", "PREPARE", "Help people explore informed next steps.", "Fasha abantu gusuzuma intambwe zikurikira."]
-              ].map(([number, title, en, rwText]) => (
-                <div className="home-method-step" key={number}>
-                  <span className="home-step-number">{number}</span>
-                  <div>
-                    <b>{title}</b>
-                    <p>{t(en, rwText)}</p>
-                  </div>
-                  <span className="home-step-arrow">↗</span>
-                </div>
-              ))}
-            </div>
+            <button
+              type="button"
+              className="home-method-minimal-cta home-method-compact-cta"
+              onClick={() => navigate("about")}
+            >
+              <span>{t("How it works", "Uko ikora")}</span>
+              <span aria-hidden="true">↗</span>
+            </button>
           </section>
 
           <section className="home-principle">
-            <div className="principle-mark">✓</div>
+            <div className="principle-mark">
+              <img src="/menya-neza-ai-logo.png" alt="MENYA NEZA AI logo" />
+            </div>
             <div>
               <span className="section-kicker">{t("TRUST THROUGH TRANSPARENCY", "ICYIZERE GISHINGIYE KU BUSOBANURO")}</span>
               <h2>
@@ -1523,8 +1683,8 @@ function App() {
             </div>
             <p>
               {t(
-                "The current platform uses historical NISR SAS 2025 crop-production data and separate market-price summaries with limitations. It does not yet provide validated disaster predictions, live weather, or official warnings.",
-                "Ubu urubuga rukoresha amakuru y'umusaruro yo muri NISR SAS 2025 n'incamake z'ibiciro ku masoko zitandukanye zifite imbogamizi. Ntiruratanga ibyahanuwe byemejwe ku biza, amakuru y'ikirere y'ako kanya, cyangwa imbuzi zemewe."
+                "The platform explores historical NISR SAS 2025 crop-production data, dated Esoko price observations, and source-provided monthly TangaBid summaries. Each source has limitations that matter. We do not yet provide validated disaster-risk predictions, live weather data, or official alerts.",
+                "Uru rubuga rusuzuma amakuru y'umusaruro w'ibihingwa yo muri NISR SAS 2025, amakuru y'ibiciro ya Esoko afite amatariki, n'incamake z'ibiciro bya buri kwezi zatanzwe na TangaBid. Buri nkomoko ifite imbogamizi zigomba kwitabwaho. Kugeza ubu, ntituratanga ihanura ry'ibyago by'ibiza ryemejwe, amakuru y'ikirere y'ako kanya, cyangwa imbuzi zemewe."
               )}
             </p>
             <button className="principle-link" onClick={() => navigate("quality")}>
@@ -1577,12 +1737,12 @@ function App() {
                   <p>{t("Largest numeric value among the reported categories for this district and season; some categories may overlap.", "Umubare munini mu byiciro byatangajwe muri aka karere no muri iki gihembwe; hari ibyiciro bishobora kuba bifitanye isano.")}</p>
                 </article>
                 <article className="stat-card">
-                  <span className="stat-label">{t("Reported crop categories", "Ibyiciro by'ibihingwa bifite imibare")}</span>
-                  <strong>{crops.length}<small> / {t("categories", "byiciro")}</small></strong>
-                  <p>{t("Categories with numeric production values in the selected district, season, and year.", "Ibyiciro bifite imibare y’umusaruro mu karere, igihembwe n’umwaka wahisemo.")}</p>
+                  <span className="stat-label">{t("Crop categories with numeric data", "Ibyiciro by'ibihingwa bifite imibare")}</span>
+                  <strong>{crops.length}<small> {t("of", "muri")} {area.length}</small></strong>
+                  <p>{t("Categories with numeric production values out of the records loaded for this selection.", "Ibyiciro bifite imibare y'umusaruro ugereranyije n'inyandiko ziri mu byo wahisemo.")}</p>
                 </article>
                 <article className="stat-card">
-                  <span className="stat-label">{t("Reported records", "Imibare yatanzwe")}</span>
+                  <span className="stat-label">{t("Reporting completeness", "Ubwuzuzanye bw'amakuru")}</span>
                   <strong>{area.length ? Math.round(reported / area.length * 100) : 0}<small>%</small></strong>
                   <p>{reported} {t("reported", "byatangajwe")} · {missing} {t("not reported", "bitatangajwe")} {t("out of", "muri")} {area.length} {t("records", "y’imibare")}.</p>
                   <div className="coverage-track"><span style={{width: `${area.length ? reported / area.length * 100 : 0}%`}} /></div>
@@ -1590,6 +1750,7 @@ function App() {
               </div>
 
               <ExplainThis
+                openByDefault
                 en="These figures describe the selected district and season in the 2025 survey. The percentage is the share of records with reported numeric values out of all records loaded for this selection. Missing values are not zero. The chart compares reported categories; some categories may overlap, so do not add them together. These historical figures do not establish current food stocks, market availability, or household food sufficiency."
                 rwText="Iyi mibare igaragaza akarere n’igihembwe wahisemo mu bushakashatsi bwa 2025. Ijanisha rigaragaza igipimo cy’imibare yatanzwe ifite agaciro k’imibare ugereranyije n’imibare yose iri mu byo wahisemo. Imibare ibura ntifatwa nka zeru. Ibyiciro bimwe bishobora kuba bifitanye isano, bityo ntibikwiye guteranywa. Iyi mibare yo mu bihe byashize ntiyemeza ububiko bw’ibiribwa buriho ubu, ibiboneka ku isoko, cyangwa ko ingo zifite ibiribwa bihagije."
               />
@@ -1599,18 +1760,139 @@ function App() {
                   <div className="card-heading"><div><span className="section-kicker">{t("CROP BREAKDOWN", "UMUSARURO UKURIKIJE IGIHINGWA")}</span><h3>{t("Reported production by crop", "Umusaruro watangajwe kuri buri gihingwa")}</h3></div><span className="unit-label">MT</span></div>
                   {crops.length ? <div className="bar-chart">{crops.slice(0, 10).map((crop, i) =>
                     <div className="bar-row" key={crop.name}>
-                      <div className="bar-title"><span>{displayCropName(crop.name)}</span><b>{fmt(crop.value)}</b></div>
+                      <div className="bar-title">
+                        <span className="crop-name-label">
+                          <span>{displayCropName(crop.name)}</span>
+                          {crop.name === "Banana" && (
+                            <span
+                              className="crop-aggregate-badge"
+                              title={t(
+                                "Aggregate category: overlaps with banana types shown separately. Do not add these values together.",
+                                "Icyiciro cy'igiteranyo: gifitanye isano n'ubwoko bw'ibitoki bugaragajwe ukwabwo. Ntuteranye iyi mibare."
+                              )}
+                            >
+                              {t("Aggregate", "Igiteranyo")}
+                            </span>
+                          )}
+                        </span>
+                        <b>{fmt(crop.value)}</b>
+                      </div>
                       <div className="bar-track"><span className={i === 0 ? "bar-fill bar-fill-main" : "bar-fill"} style={{width: `${Math.max(1.5, crop.value / max * 100)}%`}} /></div>
                     </div>
                   )}</div> : <p className="empty-state">{t("No numeric values are available for this selection.", "Nta mibare iboneka ku byo wahisemo.")}</p>}
                   <p className="chart-footnote">{t("Missing values are not treated as zero. Some reported categories are aggregates alongside their component categories (for example, Banana and its three types). Do not add these figures together; the chart compares reported labels, not mutually exclusive crop groups.", "Amakuru abura ntafatwa nka zeru. Ibyiciro bimwe bishobora kuba ari igiteranyo cy’ubwoko bugaragazwa ukwabwo, urugero Banana n’ubwoko bwayo butatu. Ntuteranye iyi mibare; igishushanyo kigereranya ibyiciro byatangajwe, kandi si ngombwa ko buri cyiciro kiba cyigenga ku kindi.")}</p>
+
+                  <details className="area-source-details">
+                    <summary>
+                      {t("View source details", "Reba ibisobanuro by'inkomoko")}
+                    </summary>
+                    <p className="area-source-intro">
+                      {t(
+                        "NISR Seasonal Agricultural Survey 2025. References are shown for each record where available. Missing values remain unknown, not zero.",
+                        "Ubushakashatsi bwa NISR ku buhinzi, 2025. Imbonerahamwe n'impapuro bigaragazwa igihe biboneka. Imibare ibura ikomeza gufatwa nk'itazwi, ntabwo ari zeru."
+                      )}
+                    </p>
+                    <a
+                      className="area-source-link"
+                      href="https://www.statistics.gov.rw/sites/default/files/documents/2025-12/SAS%202025%20Final%20report.pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {t("Open official NISR report (PDF)", "Fungura raporo ya NISR (PDF)")} ↗
+                    </a>
+                    <div className="area-source-table-wrap">
+                      <table className="area-source-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">{t("Crop", "Igihingwa")}</th>
+                            <th scope="col">{t("Production", "Umusaruro")}</th>
+                            <th scope="col">{t("Status", "Imiterere")}</th>
+                            <th scope="col">{t("Table", "Imbonerahamwe")}</th>
+                            <th scope="col">{t("Page", "Urupapuro")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {area.map((record) => {
+                            const value = number(record.production_mt);
+                            const isReported =
+                              record.source_value_status === "reported" &&
+                              value !== null;
+
+                            return (
+                              <tr key={record.crop}>
+                                <td>{displayCropName(record.crop)}</td>
+                                <td>{isReported ? `${fmt(value)} MT` : "—"}</td>
+                                <td>
+                                  {isReported
+                                    ? t("Reported", "Byaratangajwe")
+                                    : t("Not reported", "Ntiyatanzwe")}
+                                </td>
+                                <td>{record.source_table ?? "—"}</td>
+                                <td>{record.source_page ?? "—"}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+
                 </article>
                 <aside className="insight-column">
-                  <article className="insight-card"><span className="section-kicker">{t("LARGEST REPORTED CATEGORY", "ICYICIRO GIFITE UMUBARE MUNINI MU YATANZWE")}</span><h3>{crops[0] ? displayCropName(crops[0].name) : t("No reported crop", "Nta gihingwa cyatangajwe")}</h3><strong>{crops[0] ? `${fmt(crops[0].value)} MT` : "—"}</strong><p>{t("The largest numeric value among the categories reported for this selection. It is not a risk score.", "Uyu ni wo mubare munini mu byiciro byatangajwe ku byo wahisemo. Ntabwo ari amanota agaragaza ibyago.")}</p></article>
-                  <article className="plain-note"><span className="note-icon">i</span><div><b>{t("Understand these figures", "Sobanukirwa n'iyi mibare")}</b><p>{crops[0] ? t(`In ${district}, during Season ${season}, ${crops[0].name} has the largest reported production value in this selection (${fmt(crops[0].value)} MT). This alone does not show whether households have enough food.`, `Mu karere ka ${district}, mu gihembwe cya ${season}, icyiciro cya ${displayCropName(crops[0].name)} ni cyo gifite umusaruro mwinshi mu mibare yatangajwe (${fmt(crops[0].value)} toni). Ibi byonyine ntibihagije kwemeza ko abaturage bafite ibiribwa bihagije.`) : t("No reported crop value is available for this selection.", "Nta mubare w'umusaruro watangajwe uboneka ku byo wahisemo.")}</p></div></article>
-                  <article className="data-warning"><span className="warning-icon">!</span><div><b>{t("Data limitation", "Imbogamizi z'amakuru")}</b><p>{t("Some values were not reported in the source. The meaning of source dashes requires confirmation.", "Hari imibare itagaragajwe mu nyandiko y'inkomoko. Ibisobanuro by'utudomo cyangwa imirongo ikoreshwa aho imibare ibura bigomba kubanza kwemezwa.")}</p></div></article>
+<article className="plain-note"><span className="note-icon">i</span><div><b>{t("Understand these figures", "Sobanukirwa n'iyi mibare")}</b><p>{crops[0] ? t(`In ${district}, during Season ${season}, ${crops[0].name} has the largest reported production value in this selection (${fmt(crops[0].value)} MT). This alone does not show whether households have enough food.`, `Mu karere ka ${district}, mu gihembwe cya ${season}, icyiciro cya ${displayCropName(crops[0].name)} ni cyo gifite umusaruro mwinshi mu mibare yatangajwe (${fmt(crops[0].value)} toni). Ibi byonyine ntibihagije kwemeza ko abaturage bafite ibiribwa bihagije.`) : t("No reported crop value is available for this selection.", "Nta mubare w'umusaruro watangajwe uboneka ku byo wahisemo.")}</p></div></article>
+                  <article className="data-warning"><span className="warning-icon">!</span><div><b>{t("Data limitation", "Imbogamizi z'amakuru")}</b><p>{missing > 0
+                      ? t(
+                          `${missing} of ${area.length} records have no reported value for this district and season. Missing values are not treated as zero, and the meaning of source dashes has not been confirmed.`,
+                          `${missing} muri ${area.length} inyandiko nta mubare watanzwe zifite muri aka karere n'iki gihembwe. Imibare ibura ntifatwa nka zeru, kandi ibisobanuro by'imirongo iri mu mwanya w'imibare ntibiramenyekana neza.`
+                        )
+                      : t(
+                          "All records in this selection are marked as reported. This does not establish current food availability or food security.",
+                          "Inyandiko zose zatoranyijwe zigaragaza ko imibare yatanzwe. Ibi ntibyemeza ko ibiribwa biboneka ubu cyangwa ko umutekano w'ibiribwa wizewe."
+                        )}</p></div></article>
                 </aside>
               </div>
+
+              <section className="area-next-steps" aria-labelledby="area-next-title">
+                <div className="area-next-heading">
+                  <span className="section-kicker">
+                    {t("CONTINUE EXPLORING", "KOMEZA UREBE ANDI MAKURU")}
+                  </span>
+                  <h2 id="area-next-title">
+                    {t("Where would you like to go next?", "Ni hehe wakomeza?")}
+                  </h2>
+                  <p>
+                    {t("Explore related evidence and analysis using these results.",
+                       "Komeza usuzume ibimenyetso n'isesengura bifitanye isano n'ibyo wabonye.")}
+                  </p>
+                </div>
+                <div className="area-next-grid">
+                  <button type="button" className="area-next-card"
+                    onClick={() => navigate("seasonal")}>
+                    <span className="area-next-number">01</span>
+                    <strong>{t("Compare seasons", "Gereranya ibihembwe")}</strong>
+                    <span>{t("Explore reported production across seasons.",
+                             "Gereranya umusaruro watangajwe mu bihembwe.")}</span>
+                    <span className="area-next-link">{t("Compare seasons", "Gereranya ibihembwe")} ↗</span>
+                  </button>
+                  <button type="button" className="area-next-card"
+                    onClick={() => navigate("quality")}>
+                    <span className="area-next-number">02</span>
+                    <strong>{t("Data quality & sources", "Ubwiza n'inkomoko by'amakuru")}</strong>
+                    <span>{t("Review missing values and source notes.",
+                             "Reba imibare ibura n'ibisobanuro by'inkomoko.")}</span>
+                    <span className="area-next-link">{t("Review evidence", "Suzuma ibimenyetso")} ↗</span>
+                  </button>
+                  <button type="button" className="area-next-card"
+                    onClick={() => navigate("intelligence")}>
+                    <span className="area-next-number">03</span>
+                    <strong>{t("Market intelligence", "Ubusesenguzi bw'amasoko")}</strong>
+                    <span>{t("Explore available price records and limitations.",
+                             "Reba amakuru ahari ku biciro n'imbogamizi zayo.")}</span>
+                    <span className="area-next-link">{t("Explore prices", "Reba ibiciro")} ↗</span>
+                  </button>
+                </div>
+              </section>
+
             </>}
         </main>
       )}
@@ -1626,8 +1908,8 @@ function App() {
           {loading ? <div className="state-panel">{t("Loading datasets…", "Amakuru arimo gutegurwa…")}</div> : error ? <div className="state-panel error-panel">{errorMessage(error)}</div> : <>
             <div className="stat-grid">
               <article className="stat-card stat-primary"><span className="stat-label">{t("District-level records", "Imibare yakusanyijwe ku rwego rw'uturere")}</span><strong>{fmt(records.length)}</strong><p>{t("Records extracted across three agricultural seasons.", "Imibare yakusanyijwe mu bihembwe bitatu by'ubuhinzi.")}</p></article>
-              <article className="stat-card"><span className="stat-label">{t("Checks with reported district values", "Igenzura ry'imibare y'uturere yatanzwe")}</span><strong>{completeChecks}<small> / {checks.length}</small></strong><p>{t("Not all checks necessarily reconcile with national totals.", "Si buri genzura ryose rigomba guhura n'igiteranyo cyatangajwe ku rwego rw'igihugu.")}</p></article>
-              <article className="stat-card"><span className="stat-label">{t("Incomplete checks", "Igenzura rituzuye")}</span><strong>{checks.length - completeChecks}</strong><p>{t("At least one district value was not reported.", "Nibura umubare umwe w'akarere ntiwatanzwe.")}</p></article>
+              <article className="stat-card"><span className="stat-label">{t("Checks with complete district coverage", "Igenzura rifite amakuru yuzuye ku turere")}</span><strong>{completeChecks}<small> / {checks.length}</small></strong><p>{t("All expected district values are present; totals may still need review.", "Imibare y'uturere twose duteganyijwe irahari; ibiteranyo bishobora gukenera gusuzumwa.")}</p></article>
+              <article className="stat-card"><span className="stat-label">{t("Checks with partial district coverage", "Igenzura rifite amakuru atuzuye ku turere")}</span><strong>{partialChecks}</strong><p>{t("At least one expected district value is missing.", "Nibura umubare umwe w'akarere wari uteganyijwe urabura.")}</p></article>
             </div>
             <ExplainThis
               en="A district-level record is one extracted crop observation, not one person or one farm. Checks counted as not incomplete can still need review; they are not all confirmed matches. Seasonal percentages describe whether values were reported in this dataset, not crop success, food security, or disaster risk."
@@ -1664,7 +1946,14 @@ function App() {
                   <span className="difference">{r.difference_mt == null || r.difference_mt === "" ? t("Not compared", "Ntabwo byagereranyijwe") : `${fmt(Number(r.difference_mt))} MT`}</span>
                 </div>
               )}</div>
-              <p className="chart-footnote">{t("First 15 checks shown. The full validation dataset remains in the project CSV.", "Hagaragajwe igenzura 15 rya mbere. Amakuru yose y'igenzura abitswe muri dosiye ya CSV y'umushinga.")}</p>
+              <p className="chart-footnote">{t("First 15 checks shown here.", "Hano hagaragajwe igenzura 15 rya mbere.")}</p>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => navigate("quality")}
+              >
+                {t("Explore all validation checks and district evidence", "Reba igenzura ryose n'ibimenyetso by'uturere")} →
+              </button>
             </article>
           </>}
         </main>
@@ -1746,6 +2035,12 @@ function App() {
                   <span className="stat-label">{t("Districts with reported values", "Uturere twatangaje imibare")}</span>
                   <strong>{fmt(origins.summary.reported_records)}<small> / {fmt(origins.summary.expected_districts_in_dataset)}</small></strong>
                   <p>{t("District production values available in this selection.", "Imibare y'umusaruro w'uturere iboneka ku byo wahisemo.")}</p>
+                  <p className="stat-note">
+                    {t("Reporting coverage", "Igipimo cy'amakuru yatanzwe")}:{" "}
+                    {origins.summary.district_coverage_percent == null
+                      ? "—"
+                      : `${fmt(origins.summary.district_coverage_percent)}%`}
+                  </p>
                 </article>
                 <article className="stat-card">
                   <span className="stat-label">{t("Reported subtotal", "Igiteranyo cy'imibare yatangajwe")}</span>
@@ -1928,22 +2223,41 @@ function App() {
                 <div className="seasonal-comparison-list">
                   {(() => {
                     const rows = seasonalData.seasons ?? [];
-                    const maxSubtotal = Math.max(
-                      1,
-                      ...rows.map(row => Number(row.reported_district_subtotal_mt) || 0)
-                    );
+                    const subtotalValues = rows
+                      .map(row => row.reported_district_subtotal_mt)
+                      .filter(value =>
+                        value !== null &&
+                        value !== undefined &&
+                        Number.isFinite(Number(value))
+                      )
+                      .map(Number);
+                    const maxSubtotal = Math.max(1, ...subtotalValues);
 
                     return rows.map((row) => {
-                      const subtotal = Number(row.reported_district_subtotal_mt) || 0;
-                      const coverage = Number(row.district_coverage_percent) || 0;
+                      const rawSubtotal = row.reported_district_subtotal_mt;
+                      const hasSubtotal = rawSubtotal !== null &&
+                        rawSubtotal !== undefined &&
+                        Number.isFinite(Number(rawSubtotal));
+                      const subtotal = hasSubtotal ? Number(rawSubtotal) : null;
+                      const coverageRaw = row.district_coverage_percent;
+                      const coverage = coverageRaw === null ||
+                        coverageRaw === undefined ||
+                        coverageRaw === "" ||
+                        !Number.isFinite(Number(coverageRaw))
+                          ? null
+                          : Number(coverageRaw);
                       const status = row.validation_status;
-                      const statusLabel = status === "MATCH"
+                      const statusLabel = status === "NO_RECORD"
+                        ? t("No crop-season record available", "Nta makuru y'igihingwa muri iki gihembwe")
+                        : status === "MATCH"
                         ? t("Matches published total", "Bihuye n'igiteranyo cyatangajwe")
                         : status === "INCOMPLETE_DISTRICT_DATA"
                           ? t("Incomplete district data", "Amakuru y'uturere ntuzuye")
                           : status === "SMALL_DIFFERENCE_REVIEW"
                             ? t("Small difference — review", "Hari itandukaniro rito — bisuzumwe")
-                            : status;
+                            : status === "LARGE_DIFFERENCE_REVIEW"
+                              ? t("Large difference — review required", "Itandukaniro rinini — bisaba gusuzumwa")
+                              : t("Status needs review", "Imiterere ikeneye gusuzumwa");
 
                       return (
                         <article className="seasonal-comparison-card" key={row.season}>
@@ -1952,27 +2266,42 @@ function App() {
                               <span className="seasonal-season-label">
                                 {t("SEASON", "IGIHEMBWE")} {row.season}
                               </span>
-                              <h3>{row.season_period}</h3>
+                              <h3>{row.season_period || t("Seasonal period not available", "Igihe cy'igihembwe ntikiboneka")}</h3>
                             </div>
-                            <strong className="seasonal-total">{fmt(subtotal)} <small>MT</small></strong>
+                            <strong className="seasonal-total">
+                              {row.record_available === false
+                                ? t("No record", "Nta makuru")
+                                : subtotal === null
+                                  ? t("Not reported", "Ntabwo byatangajwe")
+                                  : <>{fmt(subtotal)} <small>MT</small></>}
+                            </strong>
                           </div>
 
                           <div
                             className="seasonal-bar-track"
                             role="img"
-                            aria-label={`${t("Reported district subtotal", "Igiteranyo cy'uturere cyatangajwe")}: ${fmt(subtotal)} MT`}
+                            aria-label={`${t("Reported district subtotal", "Igiteranyo cy'uturere cyatangajwe")}: ${subtotal === null ? t("Not reported", "Ntabwo byatangajwe") : `${fmt(subtotal)} MT`}`}
                           >
-                            <span style={{ width: `${(subtotal / maxSubtotal) * 100}%` }} />
+                            <span style={{ width: `${subtotal === null ? 0 : (subtotal / maxSubtotal) * 100}%` }} />
                           </div>
 
                           <div className="seasonal-metrics">
                             <div>
                               <span>{t("District coverage", "Amakuru y'uturere ahari")}</span>
-                              <strong>{row.reported_districts}/{row.expected_districts} ({fmt(coverage)}%)</strong>
+                              <strong>
+                                {row.reported_districts == null || row.expected_districts == null
+                                  ? t("Not available", "Ntiboneka")
+                                  : `${row.reported_districts}/${row.expected_districts}`}
+                                {coverage === null ? "" : ` (${fmt(coverage)}%)`}
+                              </strong>
                             </div>
                             <div>
                               <span>{t("Missing districts", "Uturere tuburamo amakuru")}</span>
-                              <strong>{row.missing_districts}</strong>
+                              <strong>
+                                {row.missing_districts == null
+                                  ? t("Not available", "Ntiboneka")
+                                  : row.missing_districts}
+                              </strong>
                             </div>
                             <div>
                               <span>{t("Published national total", "Igiteranyo cy'igihugu cyatangajwe")}</span>
@@ -1988,15 +2317,21 @@ function App() {
                             <span className={
                               status === "MATCH"
                                 ? "seasonal-status status-match"
-                                : "seasonal-status status-review"
+                                : status === "INCOMPLETE_DISTRICT_DATA"
+                                  ? "seasonal-status status-incomplete"
+                                  : "seasonal-status status-review"
                             }>
                               {statusLabel}
                             </span>
-                            <span>
-                              {t("Table", "Imbonerahamwe")} {row.source_table}
-                              {" · "}
-                              {t("page", "urupapuro")} {row.source_page}
-                            </span>
+                            {row.record_available !== false &&
+                              row.source_table != null &&
+                              row.source_page != null && (
+                                <span>
+                                  {t("Table", "Imbonerahamwe")} {row.source_table}
+                                  {" · "}
+                                  {t("page", "urupapuro")} {row.source_page}
+                                </span>
+                              )}
                           </div>
                         </article>
                       );
@@ -2845,10 +3180,22 @@ function App() {
                   <strong>
                     {intelReport.market_price_intelligence?.price_observations?.length ?? 0}
                   </strong>
-                  <p>{t(
-                    "No verified price feed is connected; no price trend or forecast is produced.",
-                    "Nta nkomoko y'amakuru y'ibiciro yagenzuwe ihujwe; bityo nta mpinduka z'ibiciro cyangwa iteganyabiciro bitangwa hano."
-                  )}</p>
+                  <p>
+                    {intelReport.market_price_intelligence?.verified_price_feed_connected === true
+                      ? ((intelReport.market_price_intelligence?.price_observations?.length ?? 0) > 0
+                          ? t(
+                              "Verified price observations are available for this report; they do not automatically support a forecast.",
+                              "Ibipimo by'ibiciro byagenzuwe birahari muri iyi raporo; ntibihita byemeza iteganyabiciro."
+                            )
+                          : t(
+                              "A verified price feed is connected, but no matching observations are available for this report.",
+                              "Inkomoko y'ibiciro yagenzuwe irahujwe, ariko nta bipimo bihuye n'iyi raporo bibonetse."
+                            ))
+                      : t(
+                          "No verified price feed is connected; no price trend or forecast is produced.",
+                          "Nta nkomoko y'amakuru y'ibiciro yagenzuwe ihujwe; bityo nta mpinduka z'ibiciro cyangwa iteganyabiciro bitangwa hano."
+                        )}
+                  </p>
                 </article>
               </div>
 
@@ -3266,8 +3613,8 @@ function App() {
                       </div>
                       <p className="monthly-trend-summary">
                         {t(
-                          `${records.length} monthly records shown. Values are source-provided and are not a forecast.`,
-                          `Hagaragajwe imibare y'amezi ${records.length}. Iyi mibare yatanzwe n'inkomoko kandi si iteganyabiciro.`
+                          `${records.length} monthly records shown. Values are source-provided, not a forecast. Sample counts are reported by the source; their methodology is unverified.`,
+                          `Hagaragajwe imibare y'amezi ${records.length}. Iyi mibare yatanzwe n'inkomoko, si iteganyabiciro. Umubare w'ibipimo watanzwe n'inkomoko; uburyo byabaruwe ntiburagenzurwa.`
                         )}
                       </p>
                     </>
@@ -3329,7 +3676,7 @@ function App() {
                         <th>{t("Minimum", "Igiciro cyo hasi")}</th>
                         <th>{t("Average", "Impuzandengo")}</th>
                         <th>{t("Maximum", "Igiciro cyo hejuru")}</th>
-                        <th>{t("Samples", "Ibipimo")}</th>
+                        <th>{t("Source-reported count", "Umubare watanzwe n'inkomoko")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3414,20 +3761,275 @@ function App() {
       )}
 
       {page === "about" && (
-        <main className="inner-page about-page">
-          <button className="back-link" onClick={() => navigate("home")}>← Garuka ku ntangiriro</button>
-          <div className="inner-heading">
-            <span className="section-kicker">{t("WHY MENYA NEZA AI", "IMPAMVU YA MENYA NEZA AI")}</span>
-            <h1>From data to <em>{t("understanding.", "busobanuro.")}</em></h1>
-            <p>{t("Our goal is to make useful information easier for communities and institutions to understand, question, and use responsibly.", "Intego yacu ni ugufasha abaturage n'inzego gusobanukirwa amakuru abafitiye akamaro, kuyasesengura no kuyakoresha neza.")}</p>
-          </div>
-          <div className="about-grid">
-            <article className="about-card"><span>01</span><h3>{t("Start with data", "Tangira ku makuru")}</h3><p>{t("Use traceable sources, document the time period, and check data quality before drawing conclusions.", "Koresha amakuru afite inkomoko izwi, werekane igihe yakusanyirijwe kandi ugenzure ubwiza bwayo mbere yo gufata imyanzuro.")}</p></article>
-            <article className="about-card"><span>02</span><h3>{t("Explain clearly", "Sobanura mu buryo bwumvikana")}</h3><p>{t("Help people understand what a finding means, what is uncertain, and what information is missing.", "Fasha abantu gusobanukirwa n'icyo ibyagaragajwe bisobanura, ibitaramenyekana neza n'amakuru abura.")}</p></article>
-            <article className="about-card"><span>03</span><h3>{t("Prepare responsibly", "Tegura mu buryo bwitondewe")}</h3><p>{t("Support informed decisions without pretending historical data is a live forecast or official alert.", "Fasha abantu gufata ibyemezo bishingiye ku makuru, utagaragaza imibare yo mu bihe byashize nk'iteganyagihe cyangwa umuburo wemewe uriho ubu.")}</p></article>
-          </div>
-          <div className="about-notice"><b>{t("What the current version can do", "Ibyo iyi verisiyo ishobora gukora")}</b><p>{t("This prototype explores historical NISR Seasonal Agricultural Survey 2025 crop-production data and its quality checks. It does not yet provide validated disaster-risk predictions, live weather, or official warnings.", "Iyi verisiyo y'igerageza isesengura imibare y'umusaruro w'ibihingwa yo muri NISR Seasonal Agricultural Survey 2025 n'igenzura ry'ubwiza bwayo. Kugeza ubu ntirashobora gutanga ibyahanuwe byemejwe ku byago by'ibiza, amakuru y'ikirere y'ako kanya cyangwa imbuzi zemewe.")}</p></div>
-          <button className="primary-button" onClick={() => navigate("area")}>{t("Explore the available data", "Reba amakuru ahari")} <span>↗</span></button>
+        <main className="inner-page about-page about-premium">
+          <button className="back-link about-premium-back" onClick={() => navigate("home")}>
+            {t("← Back to home", "← Garuka ku ntangiriro")}
+          </button>
+
+          <section className="about-hero">
+            <div className="about-hero-copy">
+
+              <h1>
+                {t("From data to", "Duhereye ku makuru tugana ku")}{" "}
+                <em>{t("understanding.", "gusobanukirwa.")}</em>
+              </h1>
+
+              <p className="about-hero-lead">
+                {t(
+                  "MENYA NEZA AI is a Rwanda-focused, citizen-first data intelligence project. We are building a clearer bridge between trusted data and the people who need to understand it, farmers, communities, researchers and institutions.",
+                  "MENYA NEZA AI ni umushinga w'ubwenge bw'ubukorano wibanda ku Rwanda kandi ugashyira umuturage imbere. Turimo kubaka uburyo bworoshye bwo guhuza amakuru afite inkomoko izwi n'abakeneye kuyasobanukirwa, abahinzi, abaturage, abashakashatsi n'inzego."
+                )}
+              </p>
+
+              <p className="about-hero-secondary">
+                {t(
+                  "Our work starts with evidence, makes room for questions, and treats uncertainty honestly. Because useful intelligence should help people think more clearly, not ask them to trust a number without explanation.",
+                  "Duhereye ku bimenyetso, tugaha abantu umwanya wo kubaza, kandi tukagaragaza ibyo tutaramenya neza. Amakuru afite akamaro akwiye gufasha abantu gutekereza neza, aho kubasaba kwizera imibare idafite ibisobanuro."
+                )}
+              </p>
+
+              <div className="about-hero-actions">
+                <button className="primary-button" onClick={() => navigate("area")}>
+                  {t("Explore the available data", "Reba amakuru ahari")}
+                  <span aria-hidden="true">↗</span>
+                </button>
+                <span className="about-hero-footnote">
+                  {t("Evidence before conclusions.", "Ibimenyetso mbere y'imyanzuro.")}
+                </span>
+              </div>
+            </div>
+
+            <div className="about-flow-card">
+              <div className="about-flow-top">
+                <span>{t("THE MENYA NEZA APPROACH", "UBURYO MENYA NEZA IKORAMO")}</span>
+                <span className="about-flow-index">01 / 03</span>
+              </div>
+
+              <div className="about-flow-intro">
+                <span className="about-flow-orbit" aria-label="MENYA NEZA AI logo">
+                  <img
+                    className="about-flow-logo"
+                    src="/menya-neza-ai-logo.png"
+                    alt="MENYA NEZA AI"
+                  />
+                </span>
+                <div>
+                  <span className="about-flow-label">
+                    {t("A CLEARER PATH", "INZIRA ISOBANUTSE")}
+                  </span>
+                  <h2>{t("From information to insight.", "Duhereye ku makuru tugana ku myumvire.")}</h2>
+                </div>
+              </div>
+
+              <div className="about-flow-steps">
+                <div className="about-flow-step">
+                  <span>01</span>
+                  <div><b>{t("Data", "Amakuru")}</b><small>{t("Find the source", "Menya inkomoko")}</small></div>
+                  <span className="about-flow-symbol">↘</span>
+                </div>
+                <div className="about-flow-step">
+                  <span>02</span>
+                  <div><b>{t("Understand", "Sobanukirwa")}</b><small>{t("Examine the evidence", "Suzuma ibimenyetso")}</small></div>
+                  <span className="about-flow-symbol">↘</span>
+                </div>
+                <div className="about-flow-step">
+                  <span>03</span>
+                  <div><b>{t("Prepare", "Itegure")}</b><small>{t("Act with context", "Fata icyemezo usobanukiwe")}</small></div>
+                  <span className="about-flow-symbol">↗</span>
+                </div>
+              </div>
+
+              <div className="about-flow-bottom">
+                <span className="about-flow-bottom-dot" />
+                {t("Built around evidence, context and people.", "Twubakiye ku bimenyetso, imiterere y'amakuru n'abantu.")}
+              </div>
+            </div>
+          </section>
+
+          <section className="about-principles">
+            <div className="about-section-heading">
+              <div>
+                <span className="about-section-kicker">{t("WHAT WE BELIEVE", "IBYO TWEMERA")}</span>
+                <h2>{t("Intelligence should earn trust.", "Amakuru agomba gutuma abantu bagira icyizere.")}</h2>
+              </div>
+              <p>
+                {t(
+                  "The value of AI is not only in what it can answer. It is also in how clearly it shows its evidence, its boundaries and the people it is designed to serve.",
+                  "Agaciro ka AI ntikagaragarira gusa mu bisubizo itanga. Kagaragarira no mu buryo igaragaza ibimenyetso, aho ubushobozi bwayo bugarukira n'abantu igenewe gufasha."
+                )}
+              </p>
+            </div>
+
+            <div className="about-grid about-premium-grid">
+              <article className="about-card about-premium-card">
+                <div className="about-card-topline">
+                  <span className="about-card-number">01</span>
+                  <span className="about-card-tag">{t("EVIDENCE", "IBIMENYETSO")}</span>
+                </div>
+                <div className="about-card-glyph" aria-hidden="true">↗</div>
+                <h3>{t("Start with what we know.", "Duhere ku byo tuzi.")}</h3>
+                <p>
+                  {t(
+                    "We use traceable sources, preserve their time context, and check data quality before drawing conclusions. Missing information stays missing; it is never quietly turned into zero.",
+                    "Dukoresha amakuru afite inkomoko izwi, tukagaragaza igihe yakusanyirijwe kandi tukagenzura ubwiza bwayo mbere yo gufata imyanzuro. Amakuru abura ntatwubahindurira kuri zeru."
+                  )}
+                </p>
+                <span className="about-card-footer">{t("SOURCE · CONTEXT · QUALITY", "INKOMOKO · IGIHE · UBUZIMA BW'AMAKURU")}</span>
+              </article>
+
+              <article className="about-card about-premium-card">
+                <div className="about-card-topline">
+                  <span className="about-card-number">02</span>
+                  <span className="about-card-tag">{t("PEOPLE", "ABANTU")}</span>
+                </div>
+                <div className="about-card-glyph" aria-hidden="true">◎</div>
+                <h3>{t("Make complexity understandable.", "Koroshya ibigoranye.")}</h3>
+                <p>
+                  {t(
+                    "We want farmers, citizens, researchers and institutions to explore information in accessible language, ask meaningful questions, and understand the evidence behind a finding.",
+                    "Twifuza ko abahinzi, abaturage, abashakashatsi n'inzego bashobora gusuzuma amakuru mu rurimi rwumvikana, kubaza ibibazo bifite akamaro no gusobanukirwa ibimenyetso bishyigikira igisubizo."
+                  )}
+                </p>
+                <span className="about-card-footer">{t("ACCESS · CLARITY · UNDERSTANDING", "KUGERWAHO · UBUMVIKANE · GUSOBANUKIRWA")}</span>
+              </article>
+
+              <article className="about-card about-premium-card">
+                <div className="about-card-topline">
+                  <span className="about-card-number">03</span>
+                  <span className="about-card-tag">{t("RESPONSIBILITY", "UBWITONZI")}</span>
+                </div>
+                <div className="about-card-glyph" aria-hidden="true">⌁</div>
+                <h3>{t("Be honest about uncertainty.", "Tugaragaze ibyo tutazi neza.")}</h3>
+                <p>
+                  {t(
+                    "AI should help explain evidence, not manufacture certainty. We distinguish historical observations from current conditions and our long-term ambition from what the product can do today.",
+                    "AI ikwiye gufasha gusobanura ibimenyetso, aho guhimba icyizere kidafite ishingiro. Dutandukanya amakuru yo mu bihe byashize n'ibibera ubu, ndetse n'intego z'igihe kirekire n'ibyo igikoresho gishobora gukora uyu munsi."
+                  )}
+                </p>
+                <span className="about-card-footer">{t("LIMITS · TRANSPARENCY · CARE", "IMBIBI · GUTUNGANYA · UBWITONZI")}</span>
+              </article>
+            </div>
+          </section>
+
+          <section className="about-vision">
+            <div className="about-vision-label">
+              <span className="about-section-kicker">{t("OUR LONG-TERM VISION", "ICYEREKEZO CYACU CY'IGIHE KIREKIRE")}</span>
+              <span className="about-vision-mark">
+                <img
+                  className="about-vision-logo"
+                  src="/menya-neza-ai-logo.png"
+                  alt="MENYA NEZA AI"
+                />
+              </span>
+            </div>
+            <div className="about-vision-copy">
+              <h2>
+                {t("From data to", "Duhereye ku makuru tugana ku")}{" "}
+                <em>{t("early action.", "kwitegura hakiri kare.")}</em>
+              </h2>
+              <p>
+                {t(
+                  "Agriculture, food markets, environmental hazards and people's livelihoods are connected. Our ambition is to make those connections easier to investigate, so communities and institutions can recognise useful signals, understand the limits of the evidence and prepare thoughtfully.",
+                  "Ubuhinzi, amasoko y'ibiribwa, ibyago byangiza ibidukikije n'imibereho y'abantu birafitanye isano. Intego yacu ni ukoroshya gusuzuma ayo masano kugira ngo abaturage n'inzego bashobore kubona ibimenyetso bifite akamaro, kumenya aho amakuru agarukira no kwitegura babitekerejeho."
+                )}
+              </p>
+              <div className="about-vision-chain">
+                <span>{t("AGRICULTURE", "UBUHINZI")}</span><i>·</i>
+                <span>{t("FOOD", "IBIRIBWA")}</span><i>·</i>
+                <span>{t("ENVIRONMENT", "IBIDUKIKIJE")}</span><i>·</i>
+                <span>{t("PEOPLE", "ABANTU")}</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="about-capabilities">
+            <div className="about-capabilities-copy">
+              <span className="about-section-kicker">{t("THE PRODUCT TODAY", "IBYO IGIKORESHO GIKORA UBU")}</span>
+              <h2>{t("A clear view of what is available, and what is not.", "Kumenya ibihari n'ibitaraboneka neza.")}</h2>
+              <p>
+                {t(
+                  "MENYA NEZA AI is an evolving prototype. We believe trust starts by being precise about what the current evidence can support.",
+                  "MENYA NEZA AI ni igikoresho kigikorerwa iterambere. Twemera ko icyizere gitangirira ku kugaragaza neza imyanzuro ishyigikiwe n'amakuru ahari."
+                )}
+              </p>
+              <p>
+                {t(
+                  "The current version explores historical NISR Seasonal Agricultural Survey 2025 crop-production data and quality checks. It also includes a dated Esoko price export and source-provided monthly TangaBid price summaries, each with specific limitations.",
+                  "Iyi verisiyo isuzuma amakuru y'umusaruro w'ibihingwa yo muri NISR Seasonal Agricultural Survey 2025 n'igenzura ry'ubwiza bwayo. Irimo kandi kopi y'amakuru y'ibiciro ya Esoko ifite amatariki n'incamake z'ibiciro bya buri kwezi zatanzwe na TangaBid, buri kimwe gifite imbogamizi zacyo."
+                )}
+              </p>
+            </div>
+
+            <div className="about-capability-panel">
+              <div className="about-capability-panel-head">
+                <span>{t("CAPABILITY SNAPSHOT", "INCAMAKE Y'UBUSHOBOZI")}</span>
+                <span className="about-capability-date">{t("CURRENT VERSION", "VERISIYO IRIHO")}</span>
+              </div>
+
+              <div className="about-capability-group">
+                <span className="about-capability-status about-status-available">
+                  {t("AVAILABLE", "BIRAHARI")}
+                </span>
+                <div className="about-capability-item">
+                  <span className="about-capability-check">✓</span>
+                  <div>
+                    <b>{t("Historical crop-production data", "Amakuru y'umusaruro w'ibihingwa")}</b>
+                    <p>{t("NISR SAS 2025 and related quality checks.", "NISR SAS 2025 n'igenzura ry'ubwiza bw'amakuru.")}</p>
+                  </div>
+                </div>
+                <div className="about-capability-item">
+                  <span className="about-capability-check">✓</span>
+                  <div>
+                    <b>{t("Dated market-price observations", "Amakuru y'ibiciro afite amatariki")}</b>
+                    <p>{t("Esoko snapshot and TangaBid monthly summaries, with caveats.", "Kopi ya Esoko n'incamake za buri kwezi za TangaBid, hamwe n'imbogamizi zabyo.")}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="about-capability-divider" />
+
+              <div className="about-capability-group">
+                <span className="about-capability-status about-status-building">
+                  {t("NOT YET PROVIDED", "NTIBIRABONEKA")}
+                </span>
+                <div className="about-capability-item">
+                  <span className="about-capability-dash">—</span>
+                  <div>
+                    <b>{t("Validated disaster-risk predictions", "Ihanura ryemejwe ry'ibyago by'ibiza")}</b>
+                    <p>{t("Not available in the current prototype.", "Ntibiraboneka muri iyi verisiyo y'igerageza.")}</p>
+                  </div>
+                </div>
+                <div className="about-capability-item">
+                  <span className="about-capability-dash">—</span>
+                  <div>
+                    <b>{t("Live weather and official alerts", "Amakuru y'ikirere y'ako kanya n'imbuzi zemewe")}</b>
+                    <p>{t("No verified live weather feed or official-warning connection.", "Nta makuru y'ikirere y'ako kanya yagenzuwe cyangwa ihuriro ry'imbuzi zemewe.")}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="about-capability-foot">
+                <span className="about-capability-foot-mark">i</span>
+                <p>
+                  {t(
+                    "Historical data and downloaded snapshots are not live conditions, forecasts or official warnings.",
+                    "Amakuru yo mu bihe byashize na kopi zavanywe ku masoko si amakuru y'ako kanya, si iteganyagihe kandi si imbuzi zemewe."
+                  )}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="about-closing">
+            <span className="about-closing-mark" aria-hidden="true">“</span>
+            <p>{t(
+              "Understand the data. Question the evidence. Prepare with care.",
+              "Sobanukirwa amakuru. Baza ku bimenyetso. Itegure witonze."
+            )}</p>
+            <button className="primary-button" onClick={() => navigate("area")}>
+              {t("Explore MENYA NEZA AI", "Genzura MENYA NEZA AI")} <span aria-hidden="true">↗</span>
+            </button>
+          </section>
         </main>
       )}
 

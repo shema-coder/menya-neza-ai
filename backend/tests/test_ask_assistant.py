@@ -59,10 +59,10 @@ def test_weather_question_is_not_answered_as_a_prediction():
     )
 
 
-def test_live_price_question_is_not_fabricated():
+def test_live_price_question_without_location_requires_clarification():
     result = ask("What is the current price of maize?")
 
-    assert result["status"] == "unsupported"
+    assert result["status"] == "needs_clarification"
     assert "price" in result["answer"].casefold()
 
 
