@@ -12,6 +12,8 @@ The project focuses on making historical crop-production statistics, selected ma
 
 - **Live application:** https://menya-neza-ai-frontend-nxsc.vercel.app/
 - **Demonstration video:** https://youtu.be/zblJ9MmKIsw
+- **Team eligibility documents:** [Eligibility PDF](./eligibility/Team-Eligibility-Documents.pdf)
+- **Demo video file:** [Download the MP4](./MENYA-NEZA-AI-NISR-2026-Demo.mp4)
 - **Full public source repository:** https://github.com/shema-coder/menya-neza-ai
 - **Backend health check:** https://menya-neza-ai-api.onrender.com/health
 - **Interactive API documentation:** https://menya-neza-ai-api.onrender.com/docs
